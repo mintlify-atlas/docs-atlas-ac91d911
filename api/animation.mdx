@@ -1,0 +1,151 @@
+---
+title: "Animation"
+description: "Frame-based animation control for Lottie and other animatable formats."
+---
+
+`tvg::Animation` controls playback of animatable picture formats (Lottie JSON, `.lottie`).
+
+## Factory
+
+```cpp
+// Animation manages its own Picture — do not call Picture::gen() separately
+auto animation = tvg::Animation::gen();
+```
+
+## Core methods
+
+```cpp
+// Get the associated Picture (owned by Animation — do not delete it)
+Picture* picture() const noexcept;
+
+// Set the current frame (0 to totalFrame()-1)
+Result frame(float no) noexcept;
+
+// Get the current frame number
+float curFrame() const noexcept;
+
+// Total number of frames
+float totalFrame() const noexcept;
+
+// Duration in seconds
+float duration() const noexcept;
+```
+
+## Segment playback
+
+Play a specific frame range within the animation:
+
+```cpp
+Result segment(float begin, float end) noexcept;
+Result segment(float* begin, float* end = nullptr) const noexcept;  // getter
+```
+
+<Note>
+  If a Lottie marker is set via `LottieAnimation::segment(const char*)`, the marker range takes precedence over `segment(float, float)`.
+</Note>
+
+## Setup
+
+```cpp
+auto animation = tvg::Animation::gen();
+auto picture = animation->picture();
+picture->load("animation.json");
+canvas->add(picture);
+```
+
+## Animation loop
+
+Drive the animation with a progress value (0.0–1.0):
+
+```cpp
+float elapsed = /* time since start in seconds */;
+float progress = elapsed / animation->duration();
+if (progress > 1.0f) progress = fmodf(progress, 1.0f);  // loop
+
+animation->frame(animation->totalFrame() * progress);
+canvas->update(animation->picture());
+canvas->draw();
+canvas->sync();
+```
+
+## Play a segment
+
+```cpp
+// Play only frames 20–60
+animation->segment(20, 60);
+
+// In the loop, totalFrame() now reflects the segment length
+animation->frame(animation->totalFrame() * progress);
+```
+
+## LottieAnimation (extended API)
+
+`tvg::LottieAnimation` (from `thorvg_lottie.h`) extends `Animation` with Lottie-specific features including markers, tweening, slots, and expression variable control.
+
+```cpp
+#include <thorvg_lottie.h>
+
+static LottieAnimation* gen() noexcept;
+
+// Segment by marker name (nullptr to reset)
+Result segment(const char* marker) noexcept;
+
+// Tween between two frames at a given progress (0.0–1.0)
+Result tween(float from, float to, float progress) noexcept;
+
+// Marker enumeration
+uint32_t markersCnt() noexcept;
+const char* marker(uint32_t idx) noexcept;
+const char* marker(uint32_t idx, float* begin, float* end) noexcept;  // experimental
+
+// Lottie slots (JSON-based property overrides)
+uint32_t gen(const char* slot) noexcept;  // returns slot ID
+Result apply(uint32_t id) noexcept;       // 0 = reset all slots
+Result del(uint32_t id) noexcept;
+
+// Set rendering quality for effects (0-100, default 50)
+Result quality(uint8_t value) noexcept;
+
+// Update expression variable for a specific layer (experimental)
+Result assign(const char* layer, uint32_t ix, const char* var, float val);
+```
+
+**Example — play a named marker:**
+```cpp
+#include <thorvg_lottie.h>
+
+auto lottie = tvg::LottieAnimation::gen();
+auto picture = lottie->picture();
+picture->load("button.json");
+canvas->add(picture);
+
+// Play only the "hover" marker segment
+lottie->segment("hover");
+
+// In the loop:
+lottie->frame(lottie->totalFrame() * progress);
+canvas->update(lottie->picture());
+canvas->draw();
+canvas->sync();
+```
+
+**Example — enumerate markers:**
+```cpp
+for (uint32_t i = 0; i < lottie->markersCnt(); i++) {
+    const char* name = lottie->marker(i);
+    // name is the marker label defined in the Lottie file
+}
+```
+
+## Build requirements
+
+| Feature | Build flag |
+|---------|-----------|
+| Lottie playback | `-Dloaders=lottie` (default) |
+| Lottie expressions | `-Dextra=lottie_exp` (default) |
+
+To reduce binary size on embedded targets, disable expressions:
+
+```bash
+meson setup builddir -Dloaders="lottie" -Dextra=""
+```

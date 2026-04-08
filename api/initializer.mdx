@@ -1,0 +1,65 @@
+---
+title: "Initializer"
+description: "Engine initialization and termination."
+---
+
+The `tvg::Initializer` class manages the ThorVG engine lifecycle. Call `init()` before any other ThorVG API and `term()` when your application exits.
+
+## Methods
+
+### `init()`
+
+```cpp
+static Result tvg::Initializer::init(uint32_t threads = 0) noexcept;
+```
+
+Initializes the ThorVG engine and launches worker threads for parallel rendering.
+
+<ParamField path="threads" type="uint32_t">
+  Number of worker threads. `0` uses only the main thread. Typically set to the number of CPU cores.
+</ParamField>
+
+Returns `Result::Success` on success. The engine uses internal reference counting — multiple calls to `init()` are safe, but the thread count is fixed on the first call.
+
+### `term()`
+
+```cpp
+static Result tvg::Initializer::term() noexcept;
+```
+
+Terminates the engine and releases all resources. Returns `Result::InsufficientCondition` if `init()` was never called.
+
+### `version()`
+
+```cpp
+static const char* tvg::Initializer::version(uint32_t* major, uint32_t* minor, uint32_t* micro) noexcept;
+```
+
+Returns the engine version string (e.g. `"1.0.0"`) and optionally fills the major/minor/micro integers.
+
+## Example
+
+```cpp
+#include <thorvg.h>
+
+int main() {
+    // Initialize with 4 worker threads
+    tvg::Initializer::init(4);
+
+    // ... use ThorVG ...
+
+    tvg::Initializer::term();
+    return 0;
+}
+```
+
+<Note>
+  `init()` and `term()` use reference counting. If you call `init()` twice, you must call `term()` twice for a full shutdown.
+</Note>
+
+## Result codes
+
+| Code | Meaning |
+|------|---------|
+| `Result::Success` | Engine started successfully |
+| `Result::InsufficientCondition` | `term()` called without prior `init()` |

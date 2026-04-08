@@ -1,0 +1,135 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "ThorVG",
+  "projectDescription": "A production-ready, lightweight C++ vector graphics engine with support for SVG, Lottie animations, and multiple GPU/CPU rendering backends.",
+  "theme": "luma",
+  "primaryColor": "#22d1b3",
+  "lightColor": "#dcba68",
+  "darkColor": "#050505",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "building"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/paint-model",
+              "concepts/canvas",
+              "concepts/scene-graph",
+              "concepts/rendering-backends"
+            ]
+          },
+          {
+            "group": "Drawing & Rendering",
+            "pages": [
+              "guides/shapes-and-paths",
+              "guides/fills-and-gradients",
+              "guides/text",
+              "guides/images-and-pictures",
+              "guides/effects-and-compositing"
+            ]
+          },
+          {
+            "group": "Animation",
+            "pages": [
+              "guides/lottie-animation",
+              "guides/svg-rendering"
+            ]
+          },
+          {
+            "group": "Integration & Tooling",
+            "pages": [
+              "guides/build-options",
+              "guides/api-bindings",
+              "guides/tools",
+              "guides/platforms"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "C++ API",
+            "pages": [
+              "api/initializer",
+              "api/canvas",
+              "api/paint",
+              "api/shape",
+              "api/fill",
+              "api/picture",
+              "api/scene",
+              "api/text",
+              "api/animation"
+            ]
+          },
+          {
+            "group": "C API",
+            "pages": [
+              "api/capi-overview"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "High-performance CPU and GPU vector rendering (Software/SIMD, OpenGL/ES, WebGL, WebGPU)",
+    "SVG Tiny rendering support",
+    "Lottie animation playback with expression support",
+    "Lightweight ~150KB core binary with modular build system",
+    "Cross-platform: embedded, mobile, desktop, and web (WASM)",
+    "Smart partial rendering for efficient UI updates",
+    "Multi-threaded task scheduler",
+    "Text rendering with TTF font support",
+    "C and C++ API bindings",
+    "Scene graph with compositing, blending, and masking"
+  ],
+  "publicApiSurface": [
+    "tvg::Initializer::init()",
+    "tvg::Initializer::term()",
+    "tvg::SwCanvas::gen()",
+    "tvg::GlCanvas::gen()",
+    "tvg::WgCanvas::gen()",
+    "tvg::Canvas::add()",
+    "tvg::Canvas::draw()",
+    "tvg::Canvas::sync()",
+    "tvg::Canvas::update()",
+    "tvg::Shape::gen()",
+    "tvg::Shape::appendRect()",
+    "tvg::Shape::appendCircle()",
+    "tvg::Shape::moveTo()",
+    "tvg::Shape::lineTo()",
+    "tvg::Shape::cubicTo()",
+    "tvg::Shape::fill()",
+    "tvg::Shape::strokeWidth()",
+    "tvg::Picture::gen()",
+    "tvg::Picture::load()",
+    "tvg::Scene::gen()",
+    "tvg::Scene::add()",
+    "tvg::Animation::gen()",
+    "tvg::Animation::frame()",
+    "tvg::Animation::duration()",
+    "tvg::LinearGradient::gen()",
+    "tvg::RadialGradient::gen()",
+    "tvg::Text::gen()",
+    "tvg::Text::font()",
+    "tvg::Text::text()",
+    "tvg::Paint::rotate()",
+    "tvg::Paint::scale()",
+    "tvg::Paint::translate()",
+    "tvg::Paint::opacity()",
+    "tvg::Paint::blend()",
+    "tvg::Paint::mask()"
+  ]
+}

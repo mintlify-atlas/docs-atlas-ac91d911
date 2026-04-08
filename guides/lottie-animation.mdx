@@ -1,0 +1,142 @@
+---
+title: "Lottie Animation"
+description: "Playing Lottie JSON animations with ThorVG, including expressions and frame control."
+---
+
+Lottie is an industry-standard, JSON-based vector animation format that enables seamless distribution of animations on any platform. Lottie files are compact, scalable without pixelation, and compatible with a wide range of devices.
+
+ThorVG supports the full Lottie feature set, including expressions, and also supports the **dotLottie** (`.lottie`) format — an open-source container format that combines multiple Lottie animations with assets like images and fonts using ZIP compression.
+
+## Build requirements
+
+The Lottie loader is enabled by default. To build ThorVG as a minimal, Lottie-only playback library:
+
+```
+meson setup builddir -Dloaders="lottie"
+```
+
+To also support bitmap image formats within Lottie files:
+
+```
+meson setup builddir -Dloaders="lottie, png, jpg, webp"
+```
+
+### Lottie expressions
+
+ThorVG enables Lottie Expressions by default via `-Dextra=lottie_exp`. Expressions are small JavaScript code snippets attached to animated properties that evaluate to a single value per frame, enabling dynamic, data-driven animations.
+
+<Note>
+  Lottie Expressions add JavaScript evaluation overhead and increase binary size. On microcontrollers (MCUs) or other memory-constrained targets, disabling expressions is recommended to keep the binary footprint minimal:
+
+  ```
+  meson setup builddir -Dloaders="lottie" -Dextra=""
+  ```
+</Note>
+
+## Setup
+
+<Steps>
+  <Step title="Initialize ThorVG">
+    Start the engine with the desired number of worker threads:
+
+    ```cpp
+    tvg::Initializer::init(4);   // 4 worker threads
+    ```
+  </Step>
+  <Step title="Create an animation and load the file">
+    Use `Animation::gen()` to create an animation instance. The associated `Picture` is owned by the animation and must not be deleted manually.
+
+    ```cpp
+    auto animation = tvg::Animation::gen();   // generate an Animation
+    auto picture = animation->picture();      // get the associated Picture
+    picture->load("lottie.json");             // load the Lottie file
+    canvas->add(picture);                     // add to canvas
+    ```
+  </Step>
+  <Step title="Query animation metadata">
+    Retrieve timing information before starting the loop:
+
+    ```cpp
+    float totalDuration = animation->duration();    // total duration in seconds
+    float totalFrames   = animation->totalFrame();  // total frame count
+    ```
+  </Step>
+  <Step title="Drive the animation loop">
+    Advance the frame based on elapsed time and redraw each frame:
+
+    ```cpp
+    // elapsedTime: accumulated seconds since animation start
+    float progress = elapsedTime / animation->duration();
+    animation->frame(animation->totalFrame() * progress);
+    canvas->update(animation->picture());
+    canvas->draw();
+    canvas->sync();
+    ```
+  </Step>
+</Steps>
+
+## Full example
+
+```cpp
+auto animation = tvg::Animation::gen();
+auto picture = animation->picture();
+picture->load("lottie.json");
+canvas->add(picture);
+
+// In animation loop:
+float progress = elapsedTime / animation->duration();
+animation->frame(animation->totalFrame() * progress);
+canvas->update(animation->picture());
+canvas->draw();
+canvas->sync();
+```
+
+## API reference
+
+| Method | Description |
+|--------|-------------|
+| `Animation::gen()` | Factory — creates a new Animation instance |
+| `animation->picture()` | Returns the Picture associated with this animation |
+| `picture->load("lottie.json")` | Loads a Lottie JSON (or `.lottie`) file into the picture |
+| `canvas->add(picture)` | Adds the picture to the canvas |
+| `animation->duration()` | Returns total animation duration in seconds |
+| `animation->totalFrame()` | Returns total number of frames (frame numbers start from 0) |
+| `animation->frame(no)` | Sets the current frame to display |
+| `animation->curFrame()` | Returns the current frame number |
+| `canvas->update(picture)` | Marks the picture for redraw on the next draw call |
+
+## LottieAnimation — advanced features
+
+For marker-based playback, tweening, slots, and expression variable overrides, use `tvg::LottieAnimation` from `thorvg_lottie.h`:
+
+```cpp
+#include <thorvg_lottie.h>
+
+auto lottie = tvg::LottieAnimation::gen();
+lottie->picture()->load("animated-button.json");
+canvas->add(lottie->picture());
+
+// Play only a named segment
+lottie->segment("hover");
+
+// Tween between frames 0 and 30 at 50% progress
+lottie->tween(0, 30, 0.5f);
+
+// Enumerate markers defined in the file
+for (uint32_t i = 0; i < lottie->markersCnt(); ++i) {
+    const char* name = lottie->marker(i);
+}
+
+// Apply a Lottie slot (JSON property override)
+uint32_t slotId = lottie->gen(R"({"nm":"stroke","t":{"k":[{"v":[1,0,0]}]}})");
+lottie->apply(slotId);
+
+// Set effect rendering quality (0=fast, 100=best, default=50)
+lottie->quality(80);
+```
+
+See the [Animation API reference](/api/animation) for the full method list.
+
+## Web usage
+
+For frontend and web projects, the ThorVG npm Lottie player is available at [npmjs.com/package/@thorvg/lottie-player](https://www.npmjs.com/package/@thorvg/lottie-player). It provides a WebAssembly-based Lottie playback component built on ThorVG.

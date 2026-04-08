@@ -1,0 +1,105 @@
+---
+title: "Tools"
+description: "CLI converters and viewer tools included with ThorVG."
+---
+
+ThorVG ships two command-line converter tools and an online viewer. Enable tools at build time with `-Dtools=`.
+
+## tvg-svg2png
+
+Converts SVG files to PNG images.
+
+**Build:**
+```bash
+meson setup builddir -Dtools=svg2png
+ninja -C builddir
+```
+
+**Usage:**
+```
+tvg-svg2png [SVG files or directories] [-r WxH] [-b rrggbb]
+```
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `-r WxH` | Output resolution (e.g. `-r 512x512`) |
+| `-b rrggbb` | Background color in hex (default: transparent) |
+
+**Examples:**
+```bash
+# Single file at default size
+tvg-svg2png icon.svg
+
+# Scale to 256×256 with white background
+tvg-svg2png icon.svg -r 256x256 -b ffffff
+
+# Convert all SVGs in a directory
+tvg-svg2png ./assets -r 200x200
+
+# Multiple files with same settings
+tvg-svg2png icon1.svg icon2.svg -r 512x512 -b ff00ff
+```
+
+---
+
+## tvg-lottie2gif
+
+Converts Lottie JSON animation files to animated GIFs.
+
+**Build:**
+```bash
+meson setup builddir -Dtools=lottie2gif -Dsavers=gif
+ninja -C builddir
+```
+
+**Usage:**
+```
+tvg-lottie2gif [Lottie files or directories] [-r WxH] [-f fps] [-b rrggbb]
+```
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `-r WxH` | Output resolution |
+| `-f fps` | Frames per second |
+| `-b rrggbb` | Background color in hex |
+
+**Examples:**
+```bash
+# Convert a Lottie file with defaults
+tvg-lottie2gif animation.json
+
+# Custom size and frame rate
+tvg-lottie2gif animation.json -r 600x600 -f 30
+
+# With background color
+tvg-lottie2gif animation.json -r 600x600 -f 30 -b fa7410
+
+# Batch convert a folder
+tvg-lottie2gif ./lotties -r 400x400 -f 24
+```
+
+---
+
+## ThorVG Viewer (web)
+
+[thorvg.github.io/thorvg.viewer](https://thorvg.github.io/thorvg.viewer/) — a browser-based viewer powered by ThorVG's WebAssembly binary.
+
+- Drag and drop SVG or Lottie files
+- Real-time vector element editing
+- Export to GIF format
+- No server upload — all processing happens locally in your browser
+
+## VS Code LiveView extension
+
+Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=thorvg.thorvg-liveview). Provides live preview of SVG and Lottie files directly in the editor as you work.
+
+## Build both tools at once
+
+```bash
+meson setup builddir -Dtools=all -Dsavers=gif
+ninja -C builddir
+```

@@ -1,80 +1,190 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: "Quick start"
+description: "Render your first vector shapes with ThorVG's C++ API in a few lines of code."
 ---
 
-## Get started in three steps
+This guide walks you through the core ThorVG workflow: initializing the engine, creating a canvas, drawing shapes, rendering, and shutting down cleanly.
 
-Get your documentation site running locally and make your first customization.
+<Steps>
 
-### Step 1: Set up your local environment
+  <Step title="Initialize the engine">
+    Call `tvg::Initializer::init()` before using any other ThorVG API. Pass the number of worker threads you want the internal task scheduler to use.
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```cpp
+    #include <thorvg.h>
 
-### Step 2: Deploy your changes
+    tvg::Initializer::init(4);  // 4 worker threads
+    ```
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    The thread count controls how many background threads ThorVG uses for encoding, decoding, and rendering tasks. A value of `0` disables multi-threading and runs everything on the calling thread.
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    <Tip>
+      For embedded targets with a single core, pass `0` to avoid thread overhead. On multi-core systems, setting the thread count to the number of available cores is a good starting point.
+    </Tip>
+  </Step>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+  <Step title="Create a software canvas">
+    Allocate a pixel buffer, generate a `SwCanvas`, and point it at the buffer.
 
-### Step 3: Go live
+    ```cpp
+    static uint32_t buffer[WIDTH * HEIGHT];  // canvas target buffer
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    auto canvas = tvg::SwCanvas::gen();      // generate a software canvas
+    canvas->target(
+        buffer,                              // pixel buffer
+        WIDTH,                               // stride (pixels per row)
+        WIDTH,                               // canvas width
+        HEIGHT,                              // canvas height
+        tvg::ColorSpace::ARGB8888            // color format
+    );
+    ```
 
-## Next steps
+    `tvg::ColorSpace::ARGB8888` produces 32-bit pixels with alpha-premultiplied channels in the order alpha, red, green, blue. Other available formats include `ABGR8888`, `ARGB8888S` (non-premultiplied), and `Grayscale8`.
 
-Now that you have your docs running, explore these key features:
+    <Note>
+      The stride value (second argument to `target()`) is the number of pixels in one row of the buffer, which equals the canvas width when the buffer is contiguous.
+    </Note>
+  </Step>
 
-<CardGroup cols={2}>
+  <Step title="Draw shapes">
+    Create `Shape` objects, define their geometry, set fills and strokes, then add them to the canvas.
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+    **Rounded rectangle with a solid fill:**
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+    ```cpp
+    auto rect = tvg::Shape::gen();
+    rect->appendRect(50, 50, 200, 200, 20, 20);  // x, y, w, h, rx, ry
+    rect->fill(100, 100, 100);                    // r, g, b
+    canvas->add(rect);
+    ```
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+    **Circle with a radial gradient fill:**
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+    ```cpp
+    auto circle = tvg::Shape::gen();
+    circle->appendCircle(400, 400, 100, 100);     // cx, cy, rx, ry
 
-</CardGroup>
+    auto fill = tvg::RadialGradient::gen();
+    fill->radial(400, 400, 150, 400, 400, 0);     // cx, cy, radius, fx, fy, fr
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+    tvg::Fill::ColorStop colorStops[2];
+    colorStops[0] = {0.0f, 255, 255, 255, 255};   // offset, r, g, b, a
+    colorStops[1] = {1.0f,   0,   0,   0, 255};
+    fill->colorStops(colorStops, 2);
+
+    circle->fill(fill);
+    canvas->add(circle);
+    ```
+  </Step>
+
+  <Step title="Draw paths with stroking">
+    Use `moveTo`, `lineTo`, and `close` to define a custom path. Apply stroke properties for styled outlines.
+
+    The example below draws a ten-pointed star shape with a dashed blue stroke:
+
+    ```cpp
+    auto path = tvg::Shape::gen();
+    path->moveTo(199, 34);
+    path->lineTo(253, 143);
+    path->lineTo(374, 160);
+    path->lineTo(287, 244);
+    path->lineTo(307, 365);
+    path->lineTo(199, 309);
+    path->lineTo( 97, 365);
+    path->lineTo(112, 245);
+    path->lineTo( 26, 161);
+    path->lineTo(146, 143);
+    path->close();
+
+    path->fill(150, 150, 255);                    // fill color (r, g, b)
+
+    path->strokeWidth(3);
+    path->strokeFill(0, 0, 255);                  // stroke color (r, g, b)
+    path->strokeJoin(tvg::StrokeJoin::Round);
+    path->strokeCap(tvg::StrokeCap::Round);
+
+    float pattern[2] = {10, 10};                  // dash length, gap length
+    path->strokeDash(pattern, 2);
+
+    canvas->add(path);
+    ```
+
+    Available stroke join styles: `Miter`, `Round`, `Bevel`.
+    Available stroke cap styles: `Butt`, `Round`, `Square`.
+  </Step>
+
+  <Step title="Render the canvas">
+    Call `draw()` to submit all pending paint objects to the renderer, then `sync()` to wait for completion.
+
+    ```cpp
+    canvas->draw();
+    canvas->sync();
+    ```
+
+    After `sync()` returns, the pixel data in `buffer` contains the fully composited image and is ready to display or write to a file.
+
+    <Note>
+      `sync()` blocks the calling thread until rendering is complete. ThorVG may perform rendering work on background threads during the interval between `draw()` and `sync()`. Do not modify any paint objects while rendering is in progress.
+    </Note>
+  </Step>
+
+  <Step title="Terminate the engine">
+    Release all engine resources when your application is done using ThorVG.
+
+    ```cpp
+    tvg::Initializer::term();
+    ```
+
+    Call this once at application shutdown, after you are done with all canvases.
+  </Step>
+
+</Steps>
+
+## Loading an SVG file
+
+`tvg::Picture` loads and renders vector image files. Pass a file path to `load()` and add the picture to the canvas.
+
+```cpp
+auto picture = tvg::Picture::gen();
+picture->load("tiger.svg");      // load an SVG file
+canvas->add(picture);
+```
+
+ThorVG implements the [SVG Tiny 1.2 specification](https://www.w3.org/TR/SVGTiny12/), which covers most static SVG content. SVG animation, interactivity, and multimedia elements are not supported.
+
+<Tip>
+  Call `picture->size()` to query the natural dimensions of the loaded SVG, then use `picture->size(w, h)` to scale it to a specific output size.
+</Tip>
+
+## Playing a Lottie animation
+
+Use `tvg::Animation` to load and play Lottie JSON animations. The `Animation` owns a `Picture` that you add to the canvas; you control playback by setting the current frame.
+
+```cpp
+auto animation = tvg::Animation::gen();
+auto picture   = animation->picture();   // picture associated with the animation
+
+picture->load("lottie.json");            // load a Lottie file
+
+float duration   = animation->duration();     // total duration in seconds
+float totalFrame = animation->totalFrame();   // total number of frames
+
+canvas->add(picture);
+```
+
+To advance the animation, update the frame and tell the canvas to redraw the picture:
+
+```cpp
+// progress is a value in [0, 1] representing position in the animation
+float progress = elapsedTime / duration;
+
+animation->frame(totalFrame * progress);   // set the current frame
+canvas->update(animation->picture());      // mark the picture as dirty
+
+canvas->draw();
+canvas->sync();
+```
+
+<Tip>
+  ThorVG supports Lottie Expressions by default. If your target is a microcontroller or a constrained device where binary size matters, you can disable expressions at build time with `-Dextra=""`.
+</Tip>

@@ -1,0 +1,308 @@
+---
+title: "Building ThorVG"
+description: "Build ThorVG from source using Meson, configure rendering backends, loaders, and optional features, or install via a package manager."
+---
+
+ThorVG uses the [Meson](https://mesonbuild.com/) build system. You can build a minimal core, a full-featured library, or anything in between by enabling only the components your application needs.
+
+## Prerequisites
+
+Install [Meson](https://mesonbuild.com/Getting-meson.html) and [Ninja](https://ninja-build.org/) before proceeding. Both are available through most system package managers:
+
+```bash
+# macOS
+brew install meson ninja
+
+# Debian / Ubuntu
+sudo apt install meson ninja-build
+
+# Windows (via pip)
+pip install meson ninja
+```
+
+## Build and install
+
+<Steps>
+
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/thorvg/thorvg.git
+    cd thorvg
+    ```
+  </Step>
+
+  <Step title="Configure with Meson">
+    Run `meson setup` from the repository root to create a build directory:
+
+    ```bash
+    meson setup builddir
+    ```
+
+    Add `-D` flags to override the default build options (see the [Build options](#build-options) section below).
+  </Step>
+
+  <Step title="Build and install">
+    Compile with Ninja, then install the library and headers:
+
+    ```bash
+    ninja -C builddir install
+    ```
+
+    All build artifacts (shared library, headers, tools, examples) are generated inside `builddir/`. Installed files go to the system prefix (usually `/usr/local`).
+  </Step>
+
+</Steps>
+
+## Building for other IDEs
+
+<Tabs>
+  <Tab title="Visual Studio">
+    Generate a Visual Studio solution file by passing `--backend=vs` to Meson:
+
+    ```bash
+    meson setup builddir --backend=vs
+    ```
+
+    The resulting `thorvg.sln` solution file is created in `builddir/`. Open it in Visual Studio to build and debug.
+  </Tab>
+  <Tab title="Xcode">
+    Generate an Xcode project by passing `--backend=xcode`:
+
+    ```bash
+    meson setup builddir --backend=xcode
+    ```
+
+    The resulting `thorvg.xcodeproj` is created in `builddir/`. Open it in Xcode to build for macOS or iOS.
+  </Tab>
+  <Tab title="Ninja (default)">
+    The default backend is Ninja and works on all platforms:
+
+    ```bash
+    meson setup builddir
+    ninja -C builddir
+    ```
+  </Tab>
+</Tabs>
+
+## Build options
+
+All options are passed with `-Doption=value` during `meson setup`. You can also reconfigure an existing build directory with `meson configure builddir -Doption=value`.
+
+### Rendering engines
+
+Controls which render backends are compiled in.
+
+| Value | Description | Default |
+|-------|-------------|---------|
+| `cpu` | Software rasterizer. No external dependencies. | Yes |
+| `gl` | OpenGL 3.3 / OpenGL ES 3.0 / WebGL 2 backend. | No |
+| `wg` | WebGPU backend (requires webgpu-native v0.27 or browser WebGPU). | No |
+| `all` | Enable all backends. | No |
+
+```bash
+-Dengines="cpu"       # default
+-Dengines="gl"        # OpenGL only
+-Dengines="all"       # all backends
+```
+
+### Loaders
+
+Controls which file format loaders are compiled in.
+
+| Value | Description | Default |
+|-------|-------------|---------|
+| `svg` | SVG Tiny 1.2 interpreter | Yes |
+| `lottie` | Lottie JSON animation | Yes |
+| `ttf` | TrueType font loader for text rendering | Yes |
+| `png` | PNG images (requires libpng) | No |
+| `jpg` | JPEG images (requires libjpeg-turbo) | No |
+| `webp` | WebP images (requires libwebp) | No |
+| `all` | All loaders | No |
+
+```bash
+-Dloaders="svg,lottie,ttf"         # default
+-Dloaders="lottie"                 # Lottie-only build
+-Dloaders="all"                    # all formats
+```
+
+### Savers
+
+Controls which file format savers are compiled in.
+
+| Value | Description | Default |
+|-------|-------------|---------|
+| `gif` | GIF export (used by the `lottie2gif` tool) | No |
+| `all` | All savers | No |
+
+```bash
+-Dsavers="gif"    # enable GIF export
+```
+
+### Other options
+
+<AccordionGroup>
+
+  <Accordion title="threads — multi-threading task scheduler">
+    | Value | Default |
+    |-------|---------|
+    | `true` / `false` | `true` |
+
+    Enables the internal thread-pool task scheduler. Disable for single-threaded environments or when you want to handle concurrency yourself.
+
+    ```bash
+    -Dthreads=false
+    ```
+  </Accordion>
+
+  <Accordion title="simd — CPU vectorization">
+    | Value | Default |
+    |-------|---------|
+    | `true` / `false` | `false` |
+
+    Enables SIMD (Single Instruction, Multiple Data) CPU vectorization for the software rasterizer. Improves rendering throughput on supported hardware.
+
+    ```bash
+    -Dsimd=true
+    ```
+  </Accordion>
+
+  <Accordion title="bindings — language bindings">
+    | Value | Description | Default |
+    |-------|-------------|---------|
+    | `capi` | C API binding (exposes a C-compatible interface) | None |
+
+    ```bash
+    -Dbindings="capi"
+    ```
+  </Accordion>
+
+  <Accordion title="tools — command-line tools">
+    | Value | Description | Default |
+    |-------|-------------|---------|
+    | `svg2png` | Convert SVG files to PNG | None |
+    | `lottie2gif` | Convert Lottie animations to GIF | None |
+    | `all` | All tools | None |
+
+    The `lottie2gif` tool also requires `-Dsavers=gif`.
+
+    ```bash
+    -Dtools="svg2png"
+    -Dtools="lottie2gif" -Dsavers="gif"
+    -Dtools="all"        -Dsavers="gif"
+    ```
+  </Accordion>
+
+  <Accordion title="extra — optional feature extensions">
+    | Value | Description | Default |
+    |-------|-------------|---------|
+    | `lottie_exp` | Lottie Expressions (JavaScript snippets in Lottie files) | Yes |
+    | `openmp` | OpenMP support for parallel processing | Yes |
+    | `opengl_es` | Force OpenGL ES mode for the GL backend | No |
+
+    To disable Lottie Expressions (reduces binary size, useful for MCUs):
+
+    ```bash
+    -Dextra=""
+    ```
+  </Accordion>
+
+  <Accordion title="static — static linking">
+    | Value | Default |
+    |-------|---------|
+    | `true` / `false` | `false` |
+
+    Forces all ThorVG modules to link statically. Useful when building a single self-contained binary.
+
+    <Note>
+      When using static linking, ensure that all external dependencies (libpng, libjpeg-turbo, libwebp) are also available as static libraries on your system.
+    </Note>
+
+    ```bash
+    -Dstatic=true
+    ```
+  </Accordion>
+
+  <Accordion title="tests — unit tests">
+    | Value | Default |
+    |-------|---------|
+    | `true` / `false` | `false` |
+
+    Builds the ThorVG unit test suite.
+
+    ```bash
+    -Dtests=true
+    ```
+  </Accordion>
+
+</AccordionGroup>
+
+## Example configurations
+
+**Minimal Lottie-only build** — smallest possible binary for a Lottie animation player:
+
+```bash
+meson setup builddir -Dloaders="lottie" -Dextra=""
+ninja -C builddir install
+```
+
+**Full-featured build** — all engines, all loaders, GIF export:
+
+```bash
+meson setup builddir -Dengines=all -Dloaders=all -Dsavers=gif
+ninja -C builddir install
+```
+
+**With C API binding:**
+
+```bash
+meson setup builddir -Dbindings="capi"
+ninja -C builddir install
+```
+
+**SIMD-accelerated software renderer with conversion tools:**
+
+```bash
+meson setup builddir -Dsimd=true -Dtools=all -Dsavers=gif
+ninja -C builddir install
+```
+
+## Installing via package managers
+
+If you don't need to build from source, ThorVG is available through several package managers:
+
+<Tabs>
+  <Tab title="vcpkg">
+    ```bash
+    vcpkg install thorvg
+    ```
+  </Tab>
+  <Tab title="Conan">
+    ```bash
+    conan install --requires=thorvg
+    ```
+  </Tab>
+  <Tab title="Homebrew">
+    ```bash
+    brew install thorvg
+    ```
+  </Tab>
+  <Tab title="Arch Linux (AUR)">
+    ```bash
+    yay -S thorvg
+    ```
+  </Tab>
+  <Tab title="Fedora">
+    ```bash
+    sudo dnf install thorvg
+    ```
+  </Tab>
+  <Tab title="MSYS2">
+    ```bash
+    pacman -S mingw-w64-x86_64-thorvg
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  Package manager versions may lag behind the latest release. For access to the newest features, build from source using the `main` branch of the [GitHub repository](https://github.com/thorvg/thorvg).
+</Note>

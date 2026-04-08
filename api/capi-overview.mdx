@@ -1,0 +1,157 @@
+---
+title: "C API Overview"
+description: "Using ThorVG from C with the thorvg_capi.h bindings."
+---
+
+ThorVG provides a C binding layer for use in C projects or when integrating with languages that have C FFI support (Python, Rust, Swift, etc.).
+
+## Enabling the C API
+
+Build ThorVG with the `capi` binding enabled:
+
+```bash
+meson setup builddir -Dbindings="capi"
+ninja -C builddir install
+```
+
+Then include the C header:
+
+```c
+#include <thorvg_capi.h>
+```
+
+## Key types
+
+| C Type | C++ Equivalent |
+|--------|---------------|
+| `Tvg_Canvas` | `tvg::Canvas` |
+| `Tvg_Paint` | `tvg::Paint` |
+| `Tvg_Gradient` | `tvg::Fill` |
+| `Tvg_Animation` | `tvg::Animation` |
+| `Tvg_Result` | `tvg::Result` |
+| `Tvg_Color_Space` | `tvg::ColorSpace` |
+| `Tvg_Stroke_Cap` | `tvg::StrokeCap` |
+| `Tvg_Stroke_Join` | `tvg::StrokeJoin` |
+| `Tvg_Fill_Spread` | `tvg::FillSpread` |
+| `Tvg_Blend_Method` | `tvg::BlendMethod` |
+
+## Quick start in C
+
+```c
+#include <thorvg_capi.h>
+#include <stdlib.h>
+
+#define WIDTH  800
+#define HEIGHT 600
+
+int main() {
+    // Initialize engine
+    tvg_engine_init(4);
+
+    // Create canvas
+    uint32_t* buffer = malloc(WIDTH * HEIGHT * sizeof(uint32_t));
+    Tvg_Canvas canvas = tvg_swcanvas_create();
+    tvg_swcanvas_set_target(canvas, buffer, WIDTH, WIDTH, HEIGHT,
+                            TVG_COLORSPACE_ARGB8888);
+
+    // Draw a rectangle
+    Tvg_Paint rect = tvg_shape_new();
+    tvg_shape_append_rect(rect, 50, 50, 200, 150, 0, 0);
+    tvg_shape_set_fill_color(rect, 100, 149, 237, 255);
+    tvg_canvas_push(canvas, rect);
+
+    // Render
+    tvg_canvas_draw(canvas);
+    tvg_canvas_sync(canvas);
+
+    // Cleanup
+    tvg_canvas_destroy(canvas);
+    tvg_engine_term();
+    free(buffer);
+    return 0;
+}
+```
+
+## Core functions
+
+### Engine
+
+```c
+Tvg_Result tvg_engine_init(uint32_t threads);
+Tvg_Result tvg_engine_term(void);
+```
+
+### Canvas
+
+```c
+Tvg_Canvas tvg_swcanvas_create(void);
+Tvg_Result tvg_swcanvas_set_target(Tvg_Canvas canvas, uint32_t* buffer,
+                                    uint32_t stride, uint32_t w, uint32_t h,
+                                    Tvg_Colorspace cs);
+Tvg_Result tvg_canvas_push(Tvg_Canvas canvas, Tvg_Paint paint);
+Tvg_Result tvg_canvas_draw(Tvg_Canvas canvas);
+Tvg_Result tvg_canvas_sync(Tvg_Canvas canvas);
+Tvg_Result tvg_canvas_update(Tvg_Canvas canvas);
+Tvg_Result tvg_canvas_update_paint(Tvg_Canvas canvas, Tvg_Paint paint);
+Tvg_Result tvg_canvas_destroy(Tvg_Canvas canvas);
+```
+
+### Shapes
+
+```c
+Tvg_Paint tvg_shape_new(void);
+Tvg_Result tvg_shape_append_rect(Tvg_Paint paint, float x, float y,
+                                  float w, float h, float rx, float ry);
+Tvg_Result tvg_shape_append_circle(Tvg_Paint paint, float cx, float cy,
+                                    float rx, float ry);
+Tvg_Result tvg_shape_move_to(Tvg_Paint paint, float x, float y);
+Tvg_Result tvg_shape_line_to(Tvg_Paint paint, float x, float y);
+Tvg_Result tvg_shape_cubic_to(Tvg_Paint paint, float cx1, float cy1,
+                               float cx2, float cy2, float x, float y);
+Tvg_Result tvg_shape_close(Tvg_Paint paint);
+Tvg_Result tvg_shape_set_fill_color(Tvg_Paint paint,
+                                     uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+Tvg_Result tvg_shape_set_stroke_width(Tvg_Paint paint, float width);
+Tvg_Result tvg_shape_set_stroke_color(Tvg_Paint paint,
+                                       uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+```
+
+### Pictures
+
+```c
+Tvg_Paint tvg_picture_new(void);
+Tvg_Result tvg_picture_load(Tvg_Paint paint, const char* filename);
+Tvg_Result tvg_picture_load_data(Tvg_Paint paint, const char* data, uint32_t size,
+                                  const char* mimetype, const char* rpath, bool copy);
+Tvg_Result tvg_picture_set_size(Tvg_Paint paint, float w, float h);
+Tvg_Result tvg_picture_get_size(const Tvg_Paint paint, float* w, float* h);
+```
+
+### Animation
+
+```c
+Tvg_Animation tvg_animation_new(void);
+Tvg_Paint     tvg_animation_get_picture(Tvg_Animation animation);
+Tvg_Result    tvg_animation_set_frame(Tvg_Animation animation, float no);
+float         tvg_animation_get_total_frame(Tvg_Animation animation);
+float         tvg_animation_get_duration(Tvg_Animation animation);
+Tvg_Result    tvg_animation_destroy(Tvg_Animation animation);
+```
+
+### Common paint operations
+
+```c
+Tvg_Result tvg_paint_rotate(Tvg_Paint paint, float degree);
+Tvg_Result tvg_paint_scale(Tvg_Paint paint, float factor);
+Tvg_Result tvg_paint_translate(Tvg_Paint paint, float x, float y);
+Tvg_Result tvg_paint_set_opacity(Tvg_Paint paint, uint8_t opacity);
+void       tvg_paint_del(Tvg_Paint paint);
+```
+
+## Full C API reference
+
+The complete C API is documented in [`src/bindings/capi/thorvg_capi.h`](https://github.com/thorvg/thorvg/blob/main/src/bindings/capi/thorvg_capi.h) in the repository.
+
+<Tip>
+  The C API mirrors the C++ API 1:1. If you understand the C++ API, the C functions follow the same pattern with `tvg_` prefix and snake_case naming.
+</Tip>

@@ -1,0 +1,136 @@
+---
+title: "Scene"
+description: "Grouping paints into a compositable scene graph node."
+---
+
+`tvg::Scene` inherits from `Paint` and acts as a container for grouping multiple paint objects. Transforms, opacity, and effects applied to a scene affect all its children.
+
+## Factory
+
+```cpp
+static Scene* gen() noexcept;
+```
+
+## Managing children
+
+```cpp
+// Add a paint to the scene (ownership transfers)
+Result add(Paint* target, Paint* at = nullptr) noexcept;
+
+// Remove one paint, or all if nullptr
+Result remove(Paint* paint = nullptr) noexcept;
+
+// Read-only list of children
+const std::list<Paint*>& paints() const noexcept;
+```
+
+Insert `target` before `at` in render order. If `at = nullptr`, appends to end.
+
+## Scene effects
+
+Apply post-processing effects after the scene renders:
+
+```cpp
+Result add(SceneEffect effect, ...) noexcept;
+```
+
+Effects are applied cumulatively in the order added. Use `SceneEffect::Clear` to remove all effects.
+
+<AccordionGroup>
+  <Accordion title="GaussianBlur">
+    ```cpp
+    // sigma > 0; direction: 0=both, 1=horizontal, 2=vertical
+    // border: 0=duplicate, 1=wrap; quality: 0-100
+    scene->add(tvg::SceneEffect::GaussianBlur, 5.0, 0, 0, 100);
+    ```
+  </Accordion>
+  <Accordion title="DropShadow">
+    ```cpp
+    // r,g,b,opacity: shadow color; angle: 0-360 degrees
+    // distance: shadow offset; sigma: blur amount; quality: 0-100
+    scene->add(tvg::SceneEffect::DropShadow,
+               0, 0, 0, 180,     // black, 70% opacity
+               315.0, 8.0,       // angle, distance
+               3.0, 100);        // blur, quality
+    ```
+  </Accordion>
+  <Accordion title="Fill">
+    ```cpp
+    // Override scene color with flat RGBA
+    scene->add(tvg::SceneEffect::Fill, 255, 0, 0, 128);  // red tint, 50% opacity
+    ```
+  </Accordion>
+  <Accordion title="Tint">
+    ```cpp
+    // Map dark tones to black color, light tones to white color
+    // intensity: 0-100
+    scene->add(tvg::SceneEffect::Tint,
+               0, 0, 128,       // black color (dark tones → deep blue)
+               255, 220, 180,   // white color (light tones → warm white)
+               80.0);           // intensity
+    ```
+  </Accordion>
+  <Accordion title="Tritone">
+    ```cpp
+    // Three-color grade: shadow, midtone, highlight + blend factor (0-255)
+    scene->add(tvg::SceneEffect::Tritone,
+               20, 10, 80,      // shadow color
+               80, 150, 200,    // midtone color
+               255, 240, 200,   // highlight color
+               200);            // blend factor
+    ```
+  </Accordion>
+  <Accordion title="Clear">
+    ```cpp
+    // Remove all previously applied effects
+    scene->add(tvg::SceneEffect::Clear);
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Inherited from Paint
+
+Scene inherits all `Paint` methods — transforms, opacity, blending, masking, and clipping apply to the whole group:
+
+```cpp
+scene->opacity(128);                          // 50% transparent group
+scene->rotate(45);                            // rotate all children
+scene->blend(tvg::BlendMethod::Screen);       // blend mode for group
+```
+
+## Example: grouped transform
+
+```cpp
+auto scene = tvg::Scene::gen();
+
+auto rect = tvg::Shape::gen();
+rect->appendRect(0, 0, 100, 100);
+rect->fill(255, 100, 0);
+scene->add(rect);
+
+auto circle = tvg::Shape::gen();
+circle->appendCircle(150, 50, 50, 50);
+circle->fill(0, 100, 255);
+scene->add(circle);
+
+// Rotate both shapes together around origin
+scene->rotate(30);
+scene->translate(200, 200);
+
+canvas->add(scene);
+```
+
+## Example: drop shadow effect
+
+```cpp
+auto scene = tvg::Scene::gen();
+
+auto text = tvg::Text::gen();
+// ... setup text ...
+scene->add(text);
+
+// Apply drop shadow to the entire scene
+scene->add(tvg::SceneEffect::DropShadow, 0, 0, 0, 200, 315.0, 5.0, 2.0, 100);
+
+canvas->add(scene);
+```

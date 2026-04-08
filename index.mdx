@@ -1,97 +1,114 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "ThorVG — Vector Graphics Engine"
+description: "A production-ready, lightweight C++ vector graphics engine supporting SVG, Lottie animations, and multiple CPU/GPU rendering backends."
 ---
 
-## Setting up
+ThorVG is a high-performance, cross-platform vector graphics engine built in C++. It renders shapes, SVG files, and Lottie animations to a canvas with a clean, minimal API — and fits in a ~150KB binary core.
 
-Get your documentation site up and running in minutes.
+Used in production by Canva, Godot, LVGL, Tizen, and more.
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Render your first shapes in minutes with the C++ API.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Building ThorVG" icon="hammer" href="/building">
+    Build from source with Meson. Configure engines, loaders, and tools.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Core Concepts" icon="book" href="/concepts/paint-model">
+    Understand the Paint model, Canvas, and scene graph.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="API Reference" icon="code" href="/api/initializer">
+    Full C++ and C API documentation for every class and method.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What ThorVG can render
 
-Everything you need to create world-class documentation.
+<CardGroup cols={2}>
+  <Card title="Shapes & Paths" icon="shapes" href="/guides/shapes-and-paths">
+    Rectangles, circles, custom paths, strokes, dash patterns, and joins.
+  </Card>
+  <Card title="Fills & Gradients" icon="fill-drip" href="/guides/fills-and-gradients">
+    Solid colors, linear and radial gradients with color stops.
+  </Card>
+  <Card title="Lottie Animation" icon="film" href="/guides/lottie-animation">
+    Full Lottie playback with expression support for interactive animations.
+  </Card>
+  <Card title="SVG Rendering" icon="vector-square" href="/guides/svg-rendering">
+    SVG Tiny 1.2 rendering for scalable vector images.
+  </Card>
+  <Card title="Text" icon="font" href="/guides/text">
+    Unicode text with TTF fonts, multi-line layout, and wrapping.
+  </Card>
+  <Card title="Effects & Compositing" icon="wand-magic-sparkles" href="/guides/effects-and-compositing">
+    Blur, drop shadow, blending, masking, and clipping.
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Get started
 
-## Need inspiration?
+<Steps>
+  <Step title="Build and install ThorVG">
+    Clone the repository and build with Meson:
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+    ```bash
+    git clone https://github.com/thorvg/thorvg.git
+    cd thorvg
+    meson setup builddir
+    ninja -C builddir install
+    ```
+  </Step>
+  <Step title="Initialize the engine">
+    Start the ThorVG engine with the desired number of worker threads:
+
+    ```cpp
+    #include <thorvg.h>
+
+    tvg::Initializer::init(4);  // 4 worker threads
+    ```
+  </Step>
+  <Step title="Create a canvas and draw">
+    Allocate a pixel buffer, set up a software canvas, and render a shape:
+
+    ```cpp
+    static uint32_t buffer[WIDTH * HEIGHT];
+
+    auto canvas = tvg::SwCanvas::gen();
+    canvas->target(buffer, WIDTH, WIDTH, HEIGHT, tvg::ColorSpace::ARGB8888);
+
+    auto rect = tvg::Shape::gen();
+    rect->appendRect(50, 50, 200, 200, 10, 10);
+    rect->fill(0, 120, 200);
+    canvas->add(rect);
+
+    canvas->draw();
+    canvas->sync();
+    ```
+  </Step>
+  <Step title="Terminate when done">
+    Release engine resources when your application exits:
+
+    ```cpp
+    tvg::Initializer::term();
+    ```
+  </Step>
+</Steps>
+
+## Rendering backends
+
+ThorVG supports multiple rendering backends — choose based on your target environment:
+
+| Backend | Build option | Best for |
+|---------|-------------|----------|
+| CPU (Software) | `engines=cpu` | Embedded, server-side, universal |
+| OpenGL/ES | `engines=gl` | Mobile, desktop GPU |
+| WebGL 2 | `engines=gl` | Web browsers |
+| WebGPU | `engines=wg` | Next-gen web & native GPU |
+
+<Tip>
+  The CPU backend is enabled by default and requires no external dependencies. Start here for maximum portability.
+</Tip>
+
+## Used in production
+
+ThorVG powers vector rendering in projects including [Canva iOS](https://www.canva.com), [Godot Engine](https://godotengine.org), [LVGL](https://lvgl.io), [dotLottie](https://dotlottie.io), [Tizen](https://www.tizen.org), and [Espressif ESP-IDF](https://www.espressif.com). See [Integration & Tooling](/guides/platforms) for the full list.

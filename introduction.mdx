@@ -1,0 +1,104 @@
+---
+title: "Introduction"
+description: "ThorVG is a production-ready C++ vector graphics engine for creating interactive apps and creative tools — lightweight, portable, and modular."
+---
+
+ThorVG is a **production-ready** vector graphics engine written in C++. It renders shapes, SVG files, Lottie animations, and raster images to a canvas through a clean, minimal API. The core binary is approximately **150KB**, making it well-suited for embedded systems, IoT devices, and resource-constrained environments alongside full desktop and web deployments.
+
+## What ThorVG renders
+
+ThorVG supports the following drawing primitives:
+
+- **Lines & shapes** — rectangles, circles, and paths with coordinate control
+- **Filling** — solid colors, linear & radial gradients, and path clipping
+- **Stroking** — stroke width, joins, caps, dash patterns, and trimming
+- **Scene management** — retainable scene graph and object transformations
+- **Composition** — blending modes and masking (alpha, luma, and more)
+- **Text** — Unicode characters with horizontal multi-line layout using scalable TTF fonts
+- **Images** — SVG, JPG, PNG, WebP, and raw bitmaps
+- **Effects** — blur, drop shadow, fill, tint, tritone, and color replacement
+- **Animations** — Lottie (JSON-based vector animation)
+
+## Architecture
+
+### Lightweight by design
+
+ThorVG is built as a single binary with selectively buildable, modular components. You include only what your application needs, keeping the binary small and the maintenance burden low.
+
+The core library holds a binary footprint of approximately **150KB**. This gives you:
+
+- **Low memory usage** — stable operation even on low-spec hardware
+- **Fast startup** — quick load and initialization time
+- **Small deployment** — suitable for embedded systems, IoT devices, and bandwidth-constrained environments
+
+### Threading model
+
+ThorVG includes an optional task scheduler built on thread pools. It handles encoding, decoding, updating, and rendering concurrently, using multi-core processors efficiently without exposing concurrency complexity to your code.
+
+You control the number of worker threads when initializing the engine:
+
+```cpp
+tvg::Initializer::init(4);  // use 4 worker threads
+```
+
+Pass `0` to disable threading and run everything on the calling thread.
+
+### Smart rendering
+
+ThorVG tracks which regions of a scene have changed between frames and redraws only those areas. This partial rendering reduces unnecessary work in UI and design-tool scenarios where large portions of the scene remain static.
+
+<Note>
+  Smart rendering provides the greatest benefit in mostly-static scenes (GUIs, design tools). In highly dynamic scenes such as full-screen animations, full-scene rendering is typically faster.
+</Note>
+
+## Rendering backends
+
+ThorVG ships with four rendering backends. You enable the backends you need at build time:
+
+| Backend | Build option | Description |
+|---------|-------------|-------------|
+| CPU / SIMD (Software) | `engines=cpu` | Default. No external dependencies. Optimized software rasterizer with ~1.8× average speed advantage over comparable engines on representative workloads. |
+| OpenGL / OpenGL ES | `engines=gl` | Hardware-accelerated rendering on desktop and mobile GPUs. Requires OpenGL 3.3 or OpenGL ES 3.0. |
+| WebGL 2 | `engines=gl` | GPU rendering in web browsers via WebGL2. |
+| WebGPU | `engines=wg` | Next-generation GPU API with compute shaders. Supports all ThorVG rendering features. Requires webgpu-native v0.27 or a browser with WebGPU support. |
+
+ThorVG abstracts underlying hardware APIs (Metal, Vulkan, DirectX) so the same application code works across platforms regardless of the available GPU accelerator.
+
+## Platform support
+
+ThorVG runs on a wide range of targets:
+
+- **Web** — via WebAssembly with WebGL or WebGPU backends
+- **Desktop** — Windows, macOS, Linux
+- **Mobile** — Android, iOS
+- **Embedded / RTOS** — Tizen, FreeRTOS-based systems, and similar environments
+- **Microcontrollers** — demonstrated on ESP32 (Espressif ESP-IDF)
+- **Headless** — server-side rendering without a display server
+
+## Used in production
+
+ThorVG powers vector rendering in the following real-world projects:
+
+- **[Canva iOS](https://www.canva.com)** — replaced the previous Lottie engine, delivering ~80% faster rendering and ~70% lower peak memory usage
+- **[Godot Engine](https://godotengine.org)** — integrated for vector-based UI and assets in the open-source game engine
+- **[LVGL](https://lvgl.io)** — provides vector drawing primitives for the embedded GUI framework
+- **[dotLottie](https://dotlottie.io)** — powers the dotLottie player for rendering Lottie animations
+- **[Tizen](https://www.tizen.org)** — backend engine for NUI Vector Graphics on the Tizen platform
+- **[Espressif ESP-IDF](https://www.espressif.com)** — official component for ESP32 and ESP32-P4 IoT devices
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Quick start" icon="rocket" href="/quickstart">
+    Render your first shapes and load an SVG in minutes.
+  </Card>
+  <Card title="Paint model" icon="book" href="/concepts/paint-model">
+    Understand how ThorVG organizes drawing objects.
+  </Card>
+  <Card title="Lottie animation" icon="film" href="/guides/lottie-animation">
+    Play back Lottie animations and control playback frames.
+  </Card>
+  <Card title="SVG rendering" icon="vector-square" href="/guides/svg-rendering">
+    Load and display SVG files with ThorVG's SVG interpreter.
+  </Card>
+</CardGroup>

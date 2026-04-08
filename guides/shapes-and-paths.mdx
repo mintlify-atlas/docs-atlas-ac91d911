@@ -1,0 +1,273 @@
+---
+title: "Shapes and Paths"
+description: "Drawing rectangles, circles, custom paths, and strokes with ThorVG."
+---
+
+ThorVG's `Shape` class is the primary drawing primitive. It combines a path outline, optional stroke, and fill into a single object that can be composed into a canvas.
+
+## Creating a shape
+
+Use the `Shape::gen()` factory to allocate a new shape instance. Ownership transfers to the canvas when you call `canvas->add()`. To release a shape manually, use `Paint::rel()`.
+
+```cpp
+auto shape = tvg::Shape::gen();
+// ... configure shape ...
+canvas->add(shape);
+```
+
+## Convenience shape methods
+
+Instead of building paths manually, ThorVG provides high-level methods for common geometry.
+
+<Tabs>
+  <Tab title="Convenience shapes">
+    ### appendRect
+
+    Appends a rectangle (optionally with rounded corners) as a new sub-path.
+
+    ```cpp
+    // Result appendRect(float x, float y, float w, float h,
+    //                   float rx = 0, float ry = 0, bool cw = true)
+    auto shape = tvg::Shape::gen();
+
+    // Plain rectangle at (10, 10), 200×100
+    shape->appendRect(10, 10, 200, 100);
+
+    // Rounded rectangle — rx/ry define corner ellipse radii
+    shape->appendRect(10, 10, 200, 100, 15, 15);
+    ```
+
+    When `rx` and `ry` are each ≥ half of `w` and `h` respectively, the rectangle becomes an ellipse.
+
+    ### appendCircle
+
+    Appends an ellipse centered at (`cx`, `cy`) with independent x/y radii. Pass equal values for a perfect circle.
+
+    ```cpp
+    // Result appendCircle(float cx, float cy, float rx, float ry, bool cw = true)
+    auto shape = tvg::Shape::gen();
+
+    // Circle: center (150, 150), radius 50
+    shape->appendCircle(150, 150, 50, 50);
+
+    // Ellipse: center (150, 150), rx=80, ry=40
+    shape->appendCircle(150, 150, 80, 40);
+    ```
+  </Tab>
+  <Tab title="Manual path commands">
+    Build arbitrary paths by issuing sequential commands. Each command updates the *current point*.
+
+    ```cpp
+    auto shape = tvg::Shape::gen();
+
+    // Start a new sub-path
+    shape->moveTo(50, 100);
+
+    // Draw straight lines
+    shape->lineTo(150, 100);
+    shape->lineTo(200, 200);
+
+    // Cubic Bézier: two control points + end point
+    // cubicTo(cx1, cy1, cx2, cy2, x, y)
+    shape->cubicTo(220, 150, 180, 250, 150, 300);
+
+    // Close sub-path (draws line back to moveTo point)
+    shape->close();
+
+    // Reset path data (keeps fill/stroke/transform)
+    // shape->reset();
+    ```
+  </Tab>
+</Tabs>
+
+## Bulk path data with appendPath
+
+When you already have pre-built path data (for example from an SVG parser or font renderer), use `appendPath()` to feed it directly without issuing individual commands:
+
+```cpp
+// Result appendPath(const PathCommand* cmds, uint32_t cmdCnt,
+//                   const Point* pts, uint32_t ptsCnt)
+
+tvg::PathCommand cmds[] = {
+    tvg::PathCommand::MoveTo,   // 1 point
+    tvg::PathCommand::LineTo,   // 1 point
+    tvg::PathCommand::LineTo,   // 1 point
+    tvg::PathCommand::Close     // 0 points
+};
+
+tvg::Point pts[] = {
+    {50,  10},   // MoveTo
+    {90, 90},    // LineTo
+    {10, 90},    // LineTo
+    // Close consumes no points
+};
+
+auto shape = tvg::Shape::gen();
+shape->appendPath(cmds, 4, pts, 3);
+shape->fill(255, 215, 0, 255);
+```
+
+<Note>
+Each `PathCommand::CubicTo` consumes **3 points** (control point 1, control point 2, end point). Mismatched counts produce no visible output.
+</Note>
+
+## Path workflow
+
+<Steps>
+  <Step title="Create the shape">
+    ```cpp
+    auto shape = tvg::Shape::gen();
+    ```
+  </Step>
+  <Step title="Build the path">
+    Use `appendRect`, `appendCircle`, `moveTo`/`lineTo`/`cubicTo`/`close`, or `appendPath`.
+  </Step>
+  <Step title="Apply fill">
+    ```cpp
+    shape->fill(255, 0, 0, 255);   // solid red, fully opaque
+    ```
+  </Step>
+  <Step title="Configure stroke (optional)">
+    ```cpp
+    shape->strokeWidth(3.0f);
+    shape->strokeFill(0, 0, 0, 255);
+    shape->strokeCap(tvg::StrokeCap::Round);
+    shape->strokeJoin(tvg::StrokeJoin::Round);
+    ```
+  </Step>
+  <Step title="Add to canvas and draw">
+    ```cpp
+    canvas->add(shape);
+    canvas->draw();
+    canvas->sync();
+    ```
+  </Step>
+</Steps>
+
+## Fill color and fill rule
+
+```cpp
+// Solid RGBA fill (r, g, b, a — each 0–255)
+shape->fill(220, 50, 50, 255);
+
+// Fill rule: controls how self-intersecting paths determine "inside"
+shape->fillRule(tvg::FillRule::EvenOdd);   // alternates inside/outside
+shape->fillRule(tvg::FillRule::NonZero);   // winding count (default)
+```
+
+## Stroke properties
+
+### Width, cap, and join
+
+```cpp
+shape->strokeWidth(4.0f);                         // stroke thickness in pixels
+shape->strokeCap(tvg::StrokeCap::Butt);           // Butt / Round / Square
+shape->strokeJoin(tvg::StrokeJoin::Miter);        // Miter / Round / Bevel
+shape->strokeMiterlimit(4.0f);                    // limits Miter spike length (default 4)
+```
+
+| Cap      | Description |
+|----------|-------------|
+| `Butt`   | Stroke ends exactly at path endpoints. |
+| `Round`  | Semicircle extends beyond each endpoint. |
+| `Square` | Rectangle extends half the stroke width beyond each endpoint. |
+
+| Join    | Description |
+|---------|-------------|
+| `Miter` | Sharp outer corner; falls back to Bevel if spike exceeds the miterlimit. |
+| `Round` | Circular arc fills the outer corner. |
+| `Bevel` | Flat triangle fills the outer corner. |
+
+### Stroke color
+
+```cpp
+// Solid stroke color
+shape->strokeFill(0, 128, 255, 255);
+
+// Gradient stroke — pass a Fill* (LinearGradient or RadialGradient)
+shape->strokeFill(gradientFill);
+```
+
+### Dashed strokes
+
+```cpp
+// strokeDash(const float* dashPattern, uint32_t cnt, float offset = 0)
+float dashPattern[] = {10.0f, 5.0f};   // 10px dash, 5px gap
+shape->strokeDash(dashPattern, 2);
+
+// With a phase offset (shifts pattern start along the path)
+shape->strokeDash(dashPattern, 2, 3.0f);
+
+// Reset dash (restore solid stroke)
+shape->strokeDash(nullptr, 0);
+```
+
+### Trim path
+
+`trimpath()` reveals only a portion of the stroke along the path, useful for draw-on animations:
+
+```cpp
+// trimpath(float begin, float end, bool simultaneous = true)
+// begin/end in [0, 1]; values outside this range are wrapped
+shape->trimpath(0.0f, 0.5f);          // show first half of stroke
+shape->trimpath(0.25f, 0.75f, false); // treat all sub-paths as one combined length
+```
+
+## Complete example: rectangle with dashed stroke
+
+```cpp
+#include <thorvg.h>
+
+void drawDashedRect(tvg::Canvas* canvas) {
+    auto shape = tvg::Shape::gen();
+
+    // Rounded rectangle
+    shape->appendRect(20, 20, 260, 160, 12, 12);
+
+    // Blue fill
+    shape->fill(30, 100, 200, 200);
+
+    // Dashed orange stroke
+    float dash[] = {14.0f, 6.0f};
+    shape->strokeWidth(3.0f);
+    shape->strokeFill(255, 140, 0, 255);
+    shape->strokeCap(tvg::StrokeCap::Round);
+    shape->strokeDash(dash, 2);
+
+    canvas->add(shape);
+}
+```
+
+## Complete example: star path with EvenOdd fill
+
+```cpp
+#include <thorvg.h>
+#include <cmath>
+
+void drawStar(tvg::Canvas* canvas) {
+    auto shape = tvg::Shape::gen();
+
+    const int   pts   = 5;
+    const float cx    = 150, cy = 150;
+    const float outer = 100, inner = 40;
+    const float pi    = 3.14159265f;
+
+    shape->moveTo(cx, cy - outer);
+    for (int i = 1; i < pts * 2; ++i) {
+        float angle = i * pi / pts - pi / 2.0f;
+        float r     = (i % 2 == 0) ? outer : inner;
+        shape->lineTo(cx + r * cosf(angle), cy + r * sinf(angle));
+    }
+    shape->close();
+
+    shape->fillRule(tvg::FillRule::EvenOdd);
+    shape->fill(255, 215, 0, 255);
+
+    float dash[] = {8.0f, 4.0f};
+    shape->strokeWidth(2.0f);
+    shape->strokeFill(180, 120, 0, 255);
+    shape->strokeDash(dash, 2);
+
+    canvas->add(shape);
+}
+```

@@ -1,0 +1,128 @@
+---
+title: "Picture"
+description: "Loading and rendering images and vector files."
+---
+
+`tvg::Picture` inherits from `Paint` and loads raster images (PNG, JPG, WebP), vector graphics (SVG), and animation formats (Lottie JSON).
+
+## Factory
+
+```cpp
+static Picture* gen() noexcept;
+```
+
+## Loading
+
+### From file
+
+```cpp
+Result load(const char* filename) noexcept;
+```
+
+ThorVG caches loaded files by path — loading the same file twice reuses the cached data.
+
+```cpp
+auto picture = tvg::Picture::gen();
+picture->load("assets/tiger.svg");
+canvas->add(picture);
+```
+
+### From memory
+
+```cpp
+Result load(const char* data, uint32_t size, const char* mimeType,
+            const char* rpath = nullptr, bool copy = false) noexcept;
+```
+
+<ParamField path="data" type="const char*" required>Pointer to file data in memory.</ParamField>
+<ParamField path="size" type="uint32_t" required>Size in bytes.</ParamField>
+<ParamField path="mimeType" type="const char*">
+  Format hint: `"svg"`, `"svg+xml"`, `"png"`, `"jpg"`, `"lottie+json"`, `"webp"`, etc. Pass `nullptr` to auto-detect.
+</ParamField>
+<ParamField path="rpath" type="const char*">Resource directory for external assets (e.g. images referenced by SVG).</ParamField>
+<ParamField path="copy" type="bool">Copy data into ThorVG's buffer. Default `false` — caller retains ownership.</ParamField>
+
+### Raw pixel data
+
+```cpp
+Result load(const uint32_t* data, uint32_t w, uint32_t h,
+            ColorSpace cs, bool copy = false) noexcept;
+```
+
+Loads a raw RGBA pixel buffer directly.
+
+## Sizing
+
+```cpp
+Result size(float w, float h) noexcept;   // resize (aspect ratio preserved)
+Result size(float* w, float* h) const noexcept;  // get natural dimensions
+```
+
+<Tip>
+  Call `size(nullptr, nullptr)` (getter form) to retrieve the image's natural size before deciding how to scale it.
+</Tip>
+
+## Origin
+
+```cpp
+Result origin(float x, float y) noexcept;         // normalized 0.0–1.0
+Result origin(float* x, float* y) const noexcept;
+```
+
+Sets the anchor point for transformations. `(0.5, 0.5)` centers the picture on its translated position.
+
+## Image filtering
+
+```cpp
+Result filter(FilterMethod method) noexcept;
+```
+
+| FilterMethod | Description |
+|-------------|-------------|
+| `Bilinear` | Smooth interpolation (default, higher quality) |
+| `Nearest` | Nearest-neighbor (faster, pixelated at scale) |
+
+<Note>This is an experimental API.</Note>
+
+## Accessing internal paint tree
+
+```cpp
+bool accessible = false;  // set true before load() for efficient access
+const Paint* paint(uint32_t id) noexcept;
+```
+
+Finds a Paint object within the Picture's scene by its `id`. Only works for formats that expose a scene graph (e.g. SVG).
+
+## Asset resolver
+
+```cpp
+Result resolver(std::function<bool(Paint* paint, const char* src, void* data)> func,
+                void* data) noexcept;
+```
+
+Provides a custom callback for resolving external resource paths. Must be called **before** `load()`.
+
+## Required build flags
+
+| Format | Build flag |
+|--------|-----------|
+| SVG | `-Dloaders=svg` (default) |
+| PNG | `-Dloaders=png` |
+| JPG | `-Dloaders=jpg` |
+| WebP | `-Dloaders=webp` |
+| Lottie JSON | `-Dloaders=lottie` (default) |
+
+## Example
+
+```cpp
+// Load and scale an SVG
+auto pic = tvg::Picture::gen();
+pic->load("logo.svg");
+
+float w, h;
+pic->size(&w, &h);
+pic->size(w * 2, h * 2);  // scale 2x
+
+pic->translate(100, 50);
+canvas->add(pic);
+```

@@ -1,0 +1,304 @@
+---
+title: "Effects and Compositing"
+description: "Blend modes, masking, clipping, opacity, and scene effects."
+---
+
+ThorVG provides a full compositing pipeline through the `Paint` base class and the `Scene` class. You can control opacity, apply blend modes, mask one paint object against another, clip to an arbitrary shape, and add post-processing effects to groups of objects.
+
+---
+
+## Opacity
+
+Set the global transparency of any paint object (shape, picture, text, or scene).
+
+```cpp
+// Result Paint::opacity(uint8_t o) noexcept;
+// o: 0 = fully transparent, 255 = fully opaque
+```
+
+```cpp
+auto shape = tvg::Shape::gen();
+shape->appendCircle(200.0f, 200.0f, 100.0f, 100.0f);
+shape->fill(255, 0, 0, 255);
+shape->opacity(128);   // 50% transparent
+canvas->add(shape);
+```
+
+---
+
+## Blend modes
+
+Blend modes control how a paint object's colors are combined with the content beneath it.
+
+```cpp
+// Result Paint::blend(BlendMethod method) noexcept;
+```
+
+| Value | Formula |
+|-------|---------|
+| `BlendMethod::Normal` | Default alpha compositing |
+| `BlendMethod::Multiply` | `S * D` |
+| `BlendMethod::Screen` | `S + D - S * D` |
+| `BlendMethod::Overlay` | Multiply or Screen depending on destination |
+| `BlendMethod::Darken` | `min(S, D)` |
+| `BlendMethod::Lighten` | `max(S, D)` |
+| `BlendMethod::ColorDodge` | `D / (255 - S)` |
+| `BlendMethod::ColorBurn` | `255 - (255 - D) / S` |
+| `BlendMethod::HardLight` | Overlay with swapped roles |
+| `BlendMethod::SoftLight` | Soft version of Overlay |
+| `BlendMethod::Difference` | `|S - D|` |
+| `BlendMethod::Exclusion` | `S + D - 2 * S * D` |
+| `BlendMethod::Hue` | HSL(Sh + Ds + Dl) |
+| `BlendMethod::Saturation` | HSL(Dh + Ss + Dl) |
+| `BlendMethod::Color` | HSL(Sh + Ss + Dl) |
+| `BlendMethod::Luminosity` | HSL(Dh + Ds + Sl) |
+| `BlendMethod::Add` | `S + D` |
+| `BlendMethod::Composition` | Intermediate composition layer (use with `Scene` or `Picture`) |
+
+```cpp
+auto overlay = tvg::Shape::gen();
+overlay->appendRect(0.0f, 0.0f, 400.0f, 300.0f);
+overlay->fill(255, 200, 50, 200);
+overlay->blend(tvg::BlendMethod::Multiply);
+canvas->add(overlay);
+```
+
+---
+
+## Masking
+
+Masking restricts the visibility of a **source** paint using a **target** paint as the mask.
+
+```cpp
+// Result Paint::mask(Paint* target, MaskMethod method) noexcept;
+```
+
+| Method | Description |
+|--------|-------------|
+| `MaskMethod::Alpha` | Uses the target's alpha channel as the mask |
+| `MaskMethod::InvAlpha` | Inverted alpha mask |
+| `MaskMethod::Luma` | Grayscale luminance of target (0.2126R + 0.7152G + 0.0722B) |
+| `MaskMethod::InvLuma` | Inverted luminance mask |
+| `MaskMethod::Add` | `(T * TA) + (S * (255 - TA))` |
+| `MaskMethod::Subtract` | `(T * TA) - (S * (255 - TA))` |
+| `MaskMethod::Intersect` | `T * min(TA, SA)` |
+| `MaskMethod::Difference` | `abs(T - S * (255 - TA))` |
+| `MaskMethod::Lighten` | Highest transparency value at intersections |
+| `MaskMethod::Darken` | Lowest transparency value at intersections |
+
+<Tabs>
+  <Tab title="Masking">
+    ```cpp
+    // The source (content to be masked)
+    auto content = tvg::Shape::gen();
+    content->appendRect(50.0f, 50.0f, 300.0f, 200.0f);
+    content->fill(80, 120, 255, 255);
+
+    // The target (mask shape - opaque areas reveal content)
+    auto maskShape = tvg::Shape::gen();
+    maskShape->appendCircle(200.0f, 150.0f, 100.0f, 100.0f);
+    maskShape->fill(255, 255, 255, 255);  // opaque white = fully visible
+
+    // Apply alpha mask: content visible only where maskShape is opaque
+    content->mask(maskShape, tvg::MaskMethod::Alpha);
+
+    canvas->add(content);
+    ```
+  </Tab>
+  <Tab title="Clipping">
+    Clipping restricts a paint's rendered area to the filled region of a `Shape`. Unlike masking, clipping uses only the path geometry, not any color or alpha values.
+
+    ```cpp
+    // Result Paint::clip(Shape* clipper) noexcept;
+
+    // Define a circular clip region
+    auto clipCircle = tvg::Shape::gen();
+    clipCircle->appendCircle(200.0f, 200.0f, 120.0f, 120.0f);
+
+    // The picture is only drawn inside the circle
+    auto pic = tvg::Picture::gen();
+    pic->load("photo.png");
+    pic->size(400.0f, 400.0f);
+    pic->clip(clipCircle);   // clipCircle ownership transfers to pic
+
+    canvas->add(pic);
+    ```
+
+    Retrieve the current clipper:
+
+    ```cpp
+    Shape* current = pic->clip();  // returns nullptr if none set
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Scene effects
+
+Scene effects are post-processing filters applied to a `Scene` after all its children have been rendered. Effects are added via `Scene::add(SceneEffect, ...)` and accumulate in the order they are called.
+
+```cpp
+// Result Scene::add(SceneEffect effect, ...) noexcept;
+```
+
+<AccordionGroup>
+  <Accordion title="GaussianBlur">
+    Applies a Gaussian blur filter to the entire scene.
+
+    **Parameters:** `sigma` (double, > 0), `direction` (int: 0=both, 1=horizontal, 2=vertical), `border` (int: 0=duplicate, 1=wrap), `quality` (int: 0-100)
+
+    ```cpp
+    auto scene = tvg::Scene::gen();
+    // ... populate scene ...
+
+    // Blur: sigma=5.0, both axes, duplicate border, 80% quality
+    scene->add(tvg::SceneEffect::GaussianBlur, 5.0, 0, 0, 80);
+
+    canvas->add(scene);
+    ```
+  </Accordion>
+  <Accordion title="DropShadow">
+    Adds a blurred drop shadow behind the scene content.
+
+    **Parameters:** `r`, `g`, `b` (int: 0-255), `opacity` (int: 0-255), `angle` (double: 0-360), `distance` (double), `sigma` (double, > 0), `quality` (int: 0-100)
+
+    ```cpp
+    auto scene = tvg::Scene::gen();
+    // ... populate scene ...
+
+    // Black shadow at 45 degrees, distance 8, sigma 4, full quality
+    scene->add(tvg::SceneEffect::DropShadow, 0, 0, 0, 200, 45.0, 8.0, 4.0, 100);
+
+    canvas->add(scene);
+    ```
+  </Accordion>
+  <Accordion title="Fill">
+    Overrides all scene content color with a solid RGBA fill.
+
+    **Parameters:** `r`, `g`, `b`, `opacity` (int: 0-255)
+
+    ```cpp
+    auto scene = tvg::Scene::gen();
+    // ... populate scene ...
+
+    // Tint entire scene red at 50% opacity
+    scene->add(tvg::SceneEffect::Fill, 255, 0, 0, 128);
+
+    canvas->add(scene);
+    ```
+  </Accordion>
+  <Accordion title="Tint">
+    Remaps the scene's luminance: dark pixels shift toward the black color, bright pixels shift toward the white color.
+
+    **Parameters:** `blackR`, `blackG`, `blackB`, `whiteR`, `whiteG`, `whiteB` (int: 0-255), `intensity` (double: 0-100)
+
+    ```cpp
+    auto scene = tvg::Scene::gen();
+    // ... populate scene ...
+
+    // Sepia-like tint: map darks to dark brown, lights to cream
+    scene->add(tvg::SceneEffect::Tint,
+               112, 66, 20,    // black point color
+               255, 245, 210,  // white point color
+               80.0);          // 80% intensity
+
+    canvas->add(scene);
+    ```
+  </Accordion>
+  <Accordion title="Tritone">
+    Maps scene luminance to three color bands: shadows, midtones, and highlights. A blend factor controls the mix between the original and the tritone colors.
+
+    **Parameters:** `shadowR`, `shadowG`, `shadowB`, `midR`, `midG`, `midB`, `hiR`, `hiG`, `hiB` (int: 0-255), `blend` (int: 0-255)
+
+    ```cpp
+    auto scene = tvg::Scene::gen();
+    // ... populate scene ...
+
+    // Deep blue shadows, teal mids, warm yellow highlights, 70% blend
+    scene->add(tvg::SceneEffect::Tritone,
+               20,  40, 120,   // shadow color
+               0,  160, 160,   // midtone color
+               255, 230,  80,  // highlight color
+               178);           // blend (178/255 ~= 70%)
+
+    canvas->add(scene);
+    ```
+  </Accordion>
+  <Accordion title="Clear">
+    Removes all previously added effects from the scene, restoring it to its unprocessed state.
+
+    ```cpp
+    scene->add(tvg::SceneEffect::Clear);
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Chaining multiple effects
+
+Effects accumulate in the order they are added:
+
+```cpp
+auto scene = tvg::Scene::gen();
+// ... populate scene ...
+
+// First blur, then drop shadow
+scene->add(tvg::SceneEffect::GaussianBlur, 3.0, 0, 0, 100);
+scene->add(tvg::SceneEffect::DropShadow, 0, 0, 0, 180, 315.0, 6.0, 3.0, 100);
+
+canvas->add(scene);
+```
+
+---
+
+## Full example: compositing layers
+
+```cpp
+#include <thorvg.h>
+using namespace tvg;
+
+void compositeLayers(Canvas* canvas) {
+    // Background
+    auto bg = Shape::gen();
+    bg->appendRect(0.0f, 0.0f, 800.0f, 600.0f);
+    bg->fill(30, 30, 40, 255);
+    canvas->add(bg);
+
+    // Content scene with drop shadow
+    auto scene = Scene::gen();
+
+    auto card = Shape::gen();
+    card->appendRect(100.0f, 100.0f, 400.0f, 250.0f, 16.0f, 16.0f);
+    card->fill(255, 255, 255, 255);
+    scene->add(card);
+
+    auto icon = Picture::gen();
+    icon->load("icon.svg");
+    icon->size(80.0f, 80.0f);
+    icon->translate(160.0f, 160.0f);
+    scene->add(icon);
+
+    scene->add(SceneEffect::DropShadow, 0, 0, 0, 160, 315.0, 12.0, 6.0, 100);
+    canvas->add(scene);
+
+    // Semi-transparent overlay with Multiply blend
+    auto tint = Shape::gen();
+    tint->appendRect(0.0f, 0.0f, 800.0f, 600.0f);
+    tint->fill(200, 180, 255, 60);
+    tint->blend(BlendMethod::Multiply);
+    canvas->add(tint);
+
+    // Clipped picture (avatar inside a circle)
+    auto clip = Shape::gen();
+    clip->appendCircle(650.0f, 150.0f, 80.0f, 80.0f);
+
+    auto avatar = Picture::gen();
+    avatar->load("avatar.png");
+    avatar->size(160.0f, 160.0f);
+    avatar->translate(570.0f, 70.0f);
+    avatar->clip(clip);
+    canvas->add(avatar);
+}
+```

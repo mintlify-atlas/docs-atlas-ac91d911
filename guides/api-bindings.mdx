@@ -1,0 +1,84 @@
+---
+title: "API Bindings"
+description: "Using ThorVG from languages other than C++."
+---
+
+ThorVG's primary API is C++. A C binding layer is included in the repository, and community-maintained bindings exist for several other languages.
+
+## C API
+
+The C binding is built into ThorVG and enabled via a build flag:
+
+```bash
+meson setup builddir -Dbindings="capi"
+ninja -C builddir install
+```
+
+Include `thorvg_capi.h` in your C project:
+
+```c
+#include <thorvg_capi.h>
+```
+
+See the [C API Reference](/api/capi-overview) for full documentation.
+
+## Language bindings
+
+<CardGroup cols={2}>
+  <Card title="Python" icon="python" href="https://pypi.org/project/thorvg-python/">
+    Available on PyPI as `thorvg-python`.
+  </Card>
+  <Card title="Swift" icon="apple" href="https://github.com/thorvg/thorvg.swift">
+    Swift bindings for iOS and macOS — `thorvg.swift` on GitHub.
+  </Card>
+  <Card title="Kotlin (Android)" icon="android" href="https://github.com/thorvg/thorvg.android">
+    Kotlin-based ThorVG support for Android.
+  </Card>
+  <Card title="Flutter" icon="mobile" href="https://github.com/thorvg/thorvg.flutter">
+    Flutter plugin for Android and iOS.
+  </Card>
+  <Card title="Unity (C#)" icon="unity" href="https://github.com/thorvg/thorvg.unity">
+    ThorVG integration for Unity via C#.
+  </Card>
+  <Card title="D (DUB)" icon="code" href="https://code.dlang.org/packages/bindbc-thorvg">
+    D language bindings via `bindbc-thorvg` on DUB.
+  </Card>
+  <Card title="Nim" icon="code" href="https://nimble.directory/pkg/thorvg">
+    Nim bindings available on Nimble.
+  </Card>
+  <Card title="WebAssembly" icon="browser" href="https://github.com/thorvg/thorvg.web">
+    WASM build for browser-based rendering via `@thorvg/webcanvas` on npm.
+  </Card>
+</CardGroup>
+
+## Web / npm
+
+ThorVG is available as an npm package for web applications:
+
+```bash
+npm install @thorvg/lottie-player
+```
+
+The WebAssembly build supports both SVG and Lottie rendering in the browser using the WebGL or WebGPU backend.
+
+## Python example
+
+```python
+import thorvg as tvg
+
+tvg.init(0)
+
+canvas = tvg.SwCanvas()
+buf = bytearray(800 * 600 * 4)
+canvas.target(buf, 800, 800, 600, tvg.ColorSpace.ARGB8888)
+
+shape = tvg.Shape()
+shape.append_rect(50, 50, 200, 150, 10, 10)
+shape.fill(100, 149, 237, 255)
+canvas.push(shape)
+
+canvas.draw()
+canvas.sync()
+
+tvg.term()
+```

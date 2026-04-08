@@ -1,0 +1,125 @@
+---
+title: "SVG Rendering"
+description: "Rendering SVG files with ThorVG's built-in SVG Tiny 1.2 interpreter."
+---
+
+ThorVG includes a built-in SVG interpreter that adheres to the [SVG Tiny 1.2 specification](https://www.w3.org/TR/SVGTiny12/). The lightweight profile makes it well-suited for embedded systems and environments where a full SVG engine is impractical.
+
+<Note>
+  The SVG Tiny 1.2 profile intentionally omits several features found in full SVG. The following are **not** supported by ThorVG's SVG interpreter:
+
+  - **Animation** — SVG-native animation elements (`<animate>`, `<animateTransform>`, etc.)
+  - **Interactivity** — Event handlers and scripting hooks
+  - **Multimedia** — Audio and video elements
+
+  For animated vector content, use Lottie instead.
+</Note>
+
+## Build requirements
+
+The SVG loader is enabled by default. To explicitly configure a build with SVG support:
+
+```
+meson setup builddir -Dloaders="svg"
+```
+
+## Loading an SVG file
+
+Use `Picture::gen()` to create a picture, load the SVG file, then add it to the canvas.
+
+```cpp
+auto picture = tvg::Picture::gen();  // generate a Picture
+picture->load("tiger.svg");          // load the SVG file
+canvas->add(picture);                // add the picture to the canvas
+canvas->draw();
+canvas->sync();
+```
+
+## Loading SVG from memory
+
+You can load SVG data directly from a memory buffer. Pass `"svg"` as the MIME type to identify the format:
+
+```cpp
+// svgData: pointer to SVG text content, dataSize: byte length
+auto picture = tvg::Picture::gen();
+picture->load(svgData, dataSize, "svg", nullptr, false);
+canvas->add(picture);
+canvas->draw();
+canvas->sync();
+```
+
+The fourth argument (`rpath`) is an optional resource directory path for external assets referenced by the SVG. Set `copy` to `true` if you need to release the buffer immediately after the call.
+
+## Resizing an SVG
+
+`Picture::size(w, h)` scales the SVG content to fit the specified dimensions while preserving the aspect ratio. The smaller scale factor across both axes is applied uniformly.
+
+<Tip>
+  Call `picture->size(&w, &h)` before resizing to retrieve the SVG's natural (original) dimensions. This lets you compute scale factors or fit the image into a target area without distortion.
+</Tip>
+
+```cpp
+auto picture = tvg::Picture::gen();
+picture->load("tiger.svg");
+
+// Get natural dimensions before resizing
+float w, h;
+picture->size(&w, &h);
+
+// Scale to fit a 512x512 target area (aspect ratio preserved)
+picture->size(512.0f, 512.0f);
+
+canvas->add(picture);
+canvas->draw();
+canvas->sync();
+```
+
+## Image filtering
+
+When an SVG is scaled, ThorVG applies a filter to the rasterized output. Control filtering quality with `Picture::filter()`:
+
+| Filter | Quality | Speed |
+|--------|---------|-------|
+| `FilterMethod::Bilinear` | Higher (default) | Slower |
+| `FilterMethod::Nearest` | Lower | Faster |
+
+```cpp
+// Use nearest-neighbor for faster rendering on constrained hardware
+picture->filter(tvg::FilterMethod::Nearest);
+```
+
+## Complete example
+
+```cpp
+#include <thorvg.h>
+
+// Initialize the engine
+tvg::Initializer::init(4);
+
+// Set up a software canvas
+static uint32_t buffer[WIDTH * HEIGHT];
+auto canvas = tvg::SwCanvas::gen();
+canvas->target(buffer, WIDTH, WIDTH, HEIGHT, tvg::ColorSpace::ARGB8888);
+
+// Load and render tiger.svg at natural size
+auto picture = tvg::Picture::gen();
+picture->load("tiger.svg");
+canvas->add(picture);
+canvas->draw();
+canvas->sync();
+
+// Terminate when done
+tvg::Initializer::term();
+```
+
+## API reference
+
+| Method | Description |
+|--------|-------------|
+| `Picture::gen()` | Factory — creates a new Picture instance |
+| `picture->load(filename)` | Loads an SVG from a file path |
+| `picture->load(data, size, mimeType, rpath, copy)` | Loads SVG from a memory buffer with an explicit MIME type |
+| `picture->size(w, h)` | Scales the picture to the given dimensions (aspect-ratio-preserving) |
+| `picture->size(&w, &h)` | Retrieves the natural (original) dimensions of the loaded image |
+| `picture->filter(method)` | Sets the filtering method (`Bilinear` by default, `Nearest` for speed) |
+| `canvas->add(picture)` | Adds the picture to the canvas for rendering |

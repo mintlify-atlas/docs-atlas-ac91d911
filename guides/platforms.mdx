@@ -1,0 +1,73 @@
+---
+title: "Platforms & Integrations"
+description: "Supported platforms and real-world projects using ThorVG."
+---
+
+ThorVG is designed for portability across all major platforms and has been adopted in production by many projects.
+
+## Supported platforms
+
+| Platform | Notes |
+|----------|-------|
+| Linux | Full support; primary development platform |
+| Windows | Full support; Visual Studio and MSYS2 builds |
+| macOS | Full support; Homebrew available |
+| iOS | ARM builds supported |
+| Android | Kotlin bindings available |
+| Web (WASM) | WebGL and WebGPU backends; npm packages available |
+| Tizen | Integrated as the official vector graphics engine |
+| Embedded / RTOS | Runs on ESP32, Tizen RT, and other MCUs |
+
+<Note>
+  The core library (~150KB) runs on microcontrollers such as the ESP32 with limited RAM and storage. For MCU targets, disable Lottie expressions and unused loaders to minimize binary size.
+</Note>
+
+## Cross-compilation
+
+The `cross/` directory in the repository contains sample cross-compilation files for various targets. Use `--cross-file` with Meson:
+
+```bash
+meson setup builddir --cross-file cross/your-target.txt
+```
+
+## Production integrations
+
+<CardGroup cols={2}>
+  <Card title="Canva iOS" icon="mobile">
+    Replaced the previous Lottie engine — achieved ~80% faster rendering and ~70% lower peak memory usage.
+  </Card>
+  <Card title="Godot Engine" icon="gamepad-modern">
+    Integrated for high-quality vector-based UI and assets in the open-source game engine.
+  </Card>
+  <Card title="LVGL" icon="microchip">
+    Serves as the vector drawing primitives library in LVGL's embedded GUI framework.
+  </Card>
+  <Card title="dotLottie" icon="film">
+    The dotLottie player (by LottieFiles) uses ThorVG as its rendering engine.
+  </Card>
+  <Card title="Tizen (Samsung)" icon="tv">
+    Powers NUI Vector Graphics for SVG and Lottie rendering across Tizen applications.
+  </Card>
+  <Card title="Espressif ESP-IDF" icon="microchip">
+    Official ThorVG component in the ESP-IDF for ESP32/ESP32-P4 IoT devices.
+  </Card>
+  <Card title="Segger emWin" icon="cpu">
+    Adopted as a GPU driver for high-performance vector rendering in Segger's embedded GUI.
+  </Card>
+  <Card title="Lottie Creator" icon="wand-magic-sparkles">
+    Powers the Canvas rendering engine behind LottieFiles' web-based animation editor.
+  </Card>
+</CardGroup>
+
+## Related projects
+
+| Project | Description |
+|---------|-------------|
+| [thorvg.android](https://github.com/thorvg/thorvg.android) | Kotlin-based Android support |
+| [thorvg.flutter](https://github.com/thorvg/thorvg.flutter) | Flutter plugin (Android + iOS) |
+| [thorvg.swift](https://github.com/thorvg/thorvg.swift) | Swift bindings |
+| [thorvg.unity](https://github.com/thorvg/thorvg.unity) | Unity C# integration |
+| [thorvg.web](https://github.com/thorvg/thorvg.web) | WebAssembly integration |
+| [thorvg.example](https://github.com/thorvg/thorvg.example) | C++ API usage examples |
+| [thorvg.janitor](https://github.com/thorvg/thorvg.janitor) | Demo game rendered with ThorVG |
+| [thorvg.viewer](https://github.com/thorvg/thorvg.viewer) | Browser-based SVG/Lottie viewer |

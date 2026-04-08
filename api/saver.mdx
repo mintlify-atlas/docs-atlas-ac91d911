@@ -1,0 +1,114 @@
+---
+title: "Saver"
+description: "Exporting paint objects and animations to files."
+---
+
+`tvg::Saver` exports a `Paint` or `Animation` to a file. The supported output format is determined by the file extension. GIF export requires building with `-Dsavers=gif`.
+
+## Factory
+
+```cpp
+static Saver* gen() noexcept;
+```
+
+## Methods
+
+### `background()`
+
+```cpp
+Result background(Paint* paint) noexcept;
+```
+
+Sets a background paint to be composited behind the saved content. Ownership of `paint` transfers to the Saver.
+
+### `save()` — paint
+
+```cpp
+Result save(Paint* paint, const char* filename, uint32_t quality = 100) noexcept;
+```
+
+Exports a `Paint` to the given file path. The format is inferred from the file extension.
+
+<ParamField path="paint" type="Paint*" required>The paint tree to export.</ParamField>
+<ParamField path="filename" type="const char*" required>Destination file path, including extension (e.g. `"output.gif"`).</ParamField>
+<ParamField path="quality" type="uint32_t">Encoding quality, 0–100. Default is 100 (maximum quality).</ParamField>
+
+Returns:
+- `Result::InsufficientCondition` — another save is still in progress
+- `Result::NonSupport` — unknown file extension or unsupported format
+- `Result::Unknown` — the paint is empty
+
+### `save()` — animation
+
+```cpp
+Result save(Animation* animation, const char* filename,
+            uint32_t quality = 100, uint32_t fps = 0) noexcept;
+```
+
+Exports an `Animation` to the given file path.
+
+<ParamField path="animation" type="Animation*" required>The animation to export.</ParamField>
+<ParamField path="filename" type="const char*" required>Destination file path.</ParamField>
+<ParamField path="quality" type="uint32_t">Encoding quality 0–100 (default 100).</ParamField>
+<ParamField path="fps" type="uint32_t">Output frame rate. `0` preserves the original frame rate. Higher FPS increases file size.</ParamField>
+
+### `sync()`
+
+```cpp
+Result sync() noexcept;
+```
+
+Waits for an in-progress save operation to complete. If `Initializer::init()` was called with threads > 0, saving may be asynchronous — always call `sync()` before reading or deleting the output file.
+
+## Build requirements
+
+| Format | Build flag |
+|--------|-----------|
+| GIF | `-Dsavers=gif` |
+
+## Example — export Lottie animation to GIF
+
+```cpp
+#include <thorvg.h>
+
+tvg::Initializer::init(4);
+
+// Load the animation
+auto animation = tvg::Animation::gen();
+animation->picture()->load("logo.json");
+
+// Create saver and export
+auto saver = tvg::Saver::gen();
+saver->save(animation, "logo.gif", 100, 30);  // 30 fps
+saver->sync();                                 // wait for completion
+
+delete saver;
+delete animation;
+
+tvg::Initializer::term();
+```
+
+## Example — export a scene snapshot
+
+```cpp
+auto scene = tvg::Scene::gen();
+
+auto bg = tvg::Shape::gen();
+bg->appendRect(0, 0, 400, 300);
+bg->fill(255, 255, 255);
+scene->add(bg);
+
+auto pic = tvg::Picture::gen();
+pic->load("icon.svg");
+scene->add(pic);
+
+auto saver = tvg::Saver::gen();
+saver->save(scene, "snapshot.gif");
+saver->sync();
+
+delete saver;
+```
+
+<Note>
+  The `tvg-lottie2gif` command-line tool provides a convenient wrapper around `Saver`. See the [Tools guide](/guides/tools) for usage.
+</Note>

@@ -1,0 +1,294 @@
+---
+title: "Paint model"
+description: "Understand tvg::Paint — the abstract base class for every drawable object in ThorVG — and how to apply transforms, opacity, blending, and masking."
+keywords: ["paint", "tvg::Paint", "transform", "opacity", "blend", "mask", "clip", "ThorVG"]
+---
+
+Every drawable element in ThorVG is a `Paint`. Before you can draw shapes, images, text, or scene groups, you need to understand this single abstraction and the properties it gives all of them.
+
+## The Paint hierarchy
+
+`tvg::Paint` is the abstract base struct for all drawable objects. You never instantiate it directly — instead, you create one of its concrete subclasses:
+
+| Class | Purpose |
+|-------|---------|
+| `tvg::Shape` | Two-dimensional figures: rectangles, circles, paths, and strokes |
+| `tvg::Picture` | Raster and vector images (SVG, PNG, JPG, WebP, Lottie, raw bitmaps) |
+| `tvg::Scene` | A container that groups multiple Paint objects into one composite layer |
+| `tvg::Text` | Unicode text rendered with a scalable TTF font |
+
+Every one of these types inherits the full set of `Paint` properties described in this page, so anything you learn here applies uniformly across the entire drawing model.
+
+<Note>
+ThorVG treats a Paint as a set of **volatile commands**. You prepare a Paint, configure its properties, and then ask a Canvas to execute those commands. The Canvas owns the execution pipeline; the Paint object describes what to draw.
+</Note>
+
+## Creating and identifying paints
+
+Each concrete class provides a static `gen()` factory method:
+
+```cpp
+auto shape   = tvg::Shape::gen();
+auto picture = tvg::Picture::gen();
+auto scene   = tvg::Scene::gen();
+auto text    = tvg::Text::gen();
+```
+
+Every Paint has a public `id` field you can set before adding the paint to a scene or canvas:
+
+```cpp
+shape->id = 42;
+```
+
+You can also check the runtime type of any paint pointer using `type()` and the `tvg::Type` enum:
+
+```cpp
+if (paint->type() == tvg::Type::Shape) {
+    auto* s = static_cast<tvg::Shape*>(paint);
+}
+```
+
+The `tvg::Type` enum values are:
+
+| Value | Class |
+|-------|-------|
+| `Type::Shape` | `tvg::Shape` |
+| `Type::Scene` | `tvg::Scene` |
+| `Type::Picture` | `tvg::Picture` |
+| `Type::Text` | `tvg::Text` |
+| `Type::LinearGradient` | `tvg::LinearGradient` |
+| `Type::RadialGradient` | `tvg::RadialGradient` |
+| `Type::Undefined` | Unknown |
+
+## Ownership and lifetime
+
+When you call `canvas->add(paint)` or `scene->add(paint)`, **ownership transfers** to the receiving container. The canvas or scene is then responsible for freeing the object when it is cleared or destroyed.
+
+If you need to keep a reference to a paint that you have already added to a container, call `ref()` before adding it:
+
+```cpp
+auto shape = tvg::Shape::gen();
+shape->ref();              // retain ownership
+canvas->add(shape);        // canvas also holds a reference
+// ... later:
+shape->unref();            // release your reference; canvas still owns it
+```
+
+`unref(bool free = true)` decrements the reference count. When the count reaches zero and `free` is `true`, the object is deleted automatically.
+
+To release a Paint you own without going through `delete`, use the safe release helper:
+
+```cpp
+tvg::Paint::rel(shape);    // safe to pass nullptr; handles ownership correctly
+```
+
+`Paint::rel()` is the counterpart to `gen()`. Always prefer it over raw `delete` when you hold sole ownership.
+
+## Transforms
+
+All Paint objects share the same affine transformation API. The coordinate system places the origin in the upper-left corner of the canvas; the x-axis points right and the y-axis points down.
+
+```cpp
+shape->translate(100.0f, 50.0f);   // move 100px right, 50px down
+shape->scale(2.0f);                 // scale uniformly by 2×
+shape->rotate(45.0f);               // rotate 45° clockwise
+```
+
+For full control, supply a 3×3 augmented affine matrix directly:
+
+```cpp
+tvg::Matrix m = {
+    1.0f, 0.0f, 100.0f,   // e11, e12, e13 (translate x)
+    0.0f, 1.0f,  50.0f,   // e21, e22, e23 (translate y)
+    0.0f, 0.0f,   1.0f    // e31, e32, e33
+};
+shape->transform(m);
+```
+
+<Note>
+`rotate()`, `scale()`, and `translate()` return `Result::InsufficientCondition` if a custom matrix has already been applied with `transform()`. Use one approach or the other for a given paint.
+</Note>
+
+Read back the current matrix at any time:
+
+```cpp
+tvg::Matrix& m = shape->transform();
+```
+
+## Opacity
+
+Set the opacity of any paint as a value in the range `[0, 255]`:
+
+```cpp
+shape->opacity(128);   // 50% transparent
+shape->opacity(255);   // fully opaque (default)
+shape->opacity(0);     // invisible
+```
+
+Read it back with:
+
+```cpp
+uint8_t o = shape->opacity();
+```
+
+<Note>
+Changing opacity on a paint may require an additional internal render pass for composition. Avoid animating opacity at a high frequency if performance is critical.
+</Note>
+
+## Visibility
+
+Hide or show a paint without removing it from the scene:
+
+```cpp
+shape->visible(false);   // exclude from rendering
+shape->visible(true);    // restore (default)
+
+bool v = shape->visible();
+```
+
+An invisible paint is not considered inactive — it still participates in update processing. To fully deactivate a paint, remove it from the canvas.
+
+## Blending
+
+Control how a paint composites on top of the layers below it using `blend()`:
+
+```cpp
+shape->blend(tvg::BlendMethod::Multiply);
+```
+
+The full list of blend modes from `tvg::BlendMethod`:
+
+| Value | Formula | Notes |
+|-------|---------|-------|
+| `Normal` | Alpha blend (default) | Standard porter-duff over |
+| `Multiply` | `S × D` | Darkens by multiplying channels |
+| `Screen` | `S + D − S×D` | Inverse multiply; lightens |
+| `Overlay` | Combines Multiply and Screen | Context-aware contrast boost |
+| `Darken` | `min(S, D)` | Keeps darkest pixels |
+| `Lighten` | `max(S, D)` | Keeps lightest pixels |
+| `ColorDodge` | `D / (255 − S)` | Brightens destination |
+| `ColorBurn` | `255 − (255−D) / S` | Darkens destination |
+| `HardLight` | Overlay with swapped roles | Strong contrast |
+| `SoftLight` | Soft version of Overlay | Subtle contrast |
+| `Difference` | `abs(S − D)` | Inverts where layers differ |
+| `Exclusion` | `S + D − 2×S×D` | Lower contrast than Difference |
+| `Hue` | HSL(Sh + Ds + Dl) | Source hue, destination saturation/luminosity |
+| `Saturation` | HSL(Dh + Ss + Dl) | Source saturation only |
+| `Color` | HSL(Sh + Ss + Dl) | Source hue and saturation |
+| `Luminosity` | HSL(Dh + Ds + Sl) | Source luminosity only |
+| `Add` | `S + D` | Additive brightening |
+| `Composition` | Intermediate layer | Use with `Scene` or `Picture` |
+
+```cpp
+// Lighten blend example
+auto highlight = tvg::Shape::gen();
+highlight->appendCircle(200, 200, 80, 80);
+highlight->fill(255, 255, 255);
+highlight->blend(tvg::BlendMethod::Lighten);
+canvas->add(highlight);
+```
+
+## Masking
+
+Apply an alpha or luminance mask by specifying a target paint and a mask method:
+
+```cpp
+auto mask = tvg::Shape::gen();
+mask->appendCircle(200, 200, 100, 100);
+mask->fill(255, 255, 255);
+
+auto content = tvg::Shape::gen();
+content->appendRect(100, 100, 200, 200);
+content->fill(100, 149, 237);
+content->mask(mask, tvg::MaskMethod::Alpha);
+
+canvas->add(content);
+```
+
+The full `tvg::MaskMethod` enum:
+
+| Value | Description |
+|-------|-------------|
+| `None` | No masking applied |
+| `Alpha` | Mask alpha values control source alpha |
+| `InvAlpha` | Complement of mask alpha controls source alpha |
+| `Luma` | Grayscale luminance of mask (0.2126R + 0.7152G + 0.0722B) |
+| `InvLuma` | Complement of luminance mask |
+| `Add` | `(T × TA) + (S × (255 − TA))` |
+| `Subtract` | `(T × TA) − (S × (255 − TA))` |
+| `Intersect` | `T × min(TA, SA)` |
+| `Difference` | `abs(T − S × (255 − TA))` |
+| `Lighten` | Where masks intersect, use the highest transparency value |
+| `Darken` | Where masks intersect, use the lowest transparency value |
+
+Read back the current mask:
+
+```cpp
+const tvg::Paint* target = nullptr;
+tvg::MaskMethod method = content->mask(&target);
+```
+
+## Clipping
+
+Restrict the drawing region of a paint to the path of a `Shape`:
+
+```cpp
+auto clipper = tvg::Shape::gen();
+clipper->appendCircle(200, 200, 100, 100);
+
+auto picture = tvg::Picture::gen();
+picture->load("photo.png");
+picture->clip(clipper);
+
+canvas->add(picture);
+```
+
+Retrieve the current clipper:
+
+```cpp
+tvg::Shape* clipper = picture->clip();
+```
+
+## Bounds and hit-testing
+
+After the canvas has been drawn and synced, you can query the bounding box of any paint.
+
+Axis-aligned bounding box (AABB):
+
+```cpp
+float x, y, w, h;
+paint->bounds(&x, &y, &w, &h);
+```
+
+Oriented bounding box (OBB) — four corners after transformations:
+
+```cpp
+tvg::Point corners[4];
+paint->bounds(corners);
+```
+
+Hit-test whether a pixel region intersects the filled area of the paint:
+
+```cpp
+bool hit = paint->intersects(mouseX, mouseY);   // 1×1 region test
+bool hit = paint->intersects(x, y, w, h);       // rectangular region test
+```
+
+## Duplicating a paint
+
+Create a deep copy of any paint with all its properties intact:
+
+```cpp
+auto copy = static_cast<tvg::Shape*>(shape->duplicate());
+canvas->add(copy);
+```
+
+## Parent traversal
+
+Retrieve the parent paint (canvas root or a Scene) that owns this paint:
+
+```cpp
+const tvg::Paint* parent = shape->parent();
+```
+
+Returns `nullptr` if the paint has not been added to any container yet.

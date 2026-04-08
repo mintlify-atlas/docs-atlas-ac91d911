@@ -1,0 +1,298 @@
+---
+title: "Scene graph"
+description: "Use tvg::Scene to group Paint objects, apply shared transforms, and add post-processing effects like Gaussian blur and drop shadow."
+keywords: ["scene", "scene graph", "tvg::Scene", "group", "effects", "blur", "drop shadow", "ThorVG"]
+---
+
+ThorVG's scene graph lets you treat a collection of `Paint` objects as a single unit. You can apply transforms, opacity, blending, and masking to the group as a whole — and add post-processing effects that are computed after the scene is rendered.
+
+## Creating a scene
+
+```cpp
+auto scene = tvg::Scene::gen();
+```
+
+`Scene` extends `Paint`, which means you add it to a canvas the same way you add any other paint:
+
+```cpp
+canvas->add(scene);
+```
+
+## Adding children
+
+Add any `Paint` — including nested `Scene` objects — to the scene:
+
+```cpp
+auto rect = tvg::Shape::gen();
+rect->appendRect(0, 0, 200, 200);
+rect->fill(100, 149, 237);
+
+auto circle = tvg::Shape::gen();
+circle->appendCircle(100, 100, 80, 80);
+circle->fill(255, 100, 100);
+
+scene->add(rect);
+scene->add(circle);
+```
+
+Children render in the order they are added (back to front). To insert a child before an existing one:
+
+```cpp
+scene->add(newPaint, existingPaint);   // inserts newPaint before existingPaint
+```
+
+<Note>
+When you call `scene->add(paint)`, ownership transfers to the scene. The scene frees its children when cleared or destroyed. Call `paint->ref()` before adding if you want to retain ownership.
+</Note>
+
+## Removing children
+
+```cpp
+scene->remove(rect);     // remove a specific child
+scene->remove();         // remove all children
+```
+
+## Listing children
+
+```cpp
+const std::list<tvg::Paint*>& children = scene->paints();
+```
+
+Do not modify the returned list directly.
+
+## Applying transforms to a group
+
+Because `Scene` inherits from `Paint`, every transform method is available on the scene. The transform is applied to all children simultaneously:
+
+```cpp
+auto scene = tvg::Scene::gen();
+scene->add(rect);
+scene->add(circle);
+
+// Translate the entire group by (50, 100)
+scene->translate(50.0f, 100.0f);
+
+// Scale the entire group by 1.5×
+scene->scale(1.5f);
+
+// Rotate the entire group 30° clockwise
+scene->rotate(30.0f);
+
+canvas->add(scene);
+```
+
+You can also set opacity, blend mode, and masks on the group:
+
+```cpp
+scene->opacity(180);                              // ~70% transparent
+scene->blend(tvg::BlendMethod::Multiply);
+scene->mask(maskPaint, tvg::MaskMethod::Alpha);
+```
+
+## Grouping example
+
+```cpp
+#include "thorvg.h"
+
+// Group two shapes and move them together
+auto group = tvg::Scene::gen();
+
+auto bg = tvg::Shape::gen();
+bg->appendRect(0, 0, 160, 80, 8, 8);
+bg->fill(40, 40, 40);
+group->add(bg);
+
+auto label = tvg::Shape::gen();
+label->appendRect(10, 10, 140, 60, 4, 4);
+label->fill(255, 200, 50);
+group->add(label);
+
+// Move the whole card to (200, 150)
+group->translate(200.0f, 150.0f);
+
+canvas->add(group);
+```
+
+## Scene effects
+
+After a scene is rendered, you can apply post-processing effects to its output. Call `scene->add(SceneEffect, ...)` with the appropriate effect and its parameters. Effects chain in the order they are added.
+
+```cpp
+scene->add(tvg::SceneEffect::GaussianBlur, 4.0, 0, 0, 100);
+```
+
+To remove all previously applied effects and restore the scene to its original appearance:
+
+```cpp
+scene->add(tvg::SceneEffect::Clear);
+```
+
+### Available effects
+
+<AccordionGroup>
+  <Accordion title="GaussianBlur">
+    Apply a Gaussian blur to the entire rendered scene.
+
+    ```cpp
+    scene->add(
+        tvg::SceneEffect::GaussianBlur,
+        sigma,      // double  — blur radius; must be > 0
+        direction,  // int     — 0: both axes, 1: horizontal only, 2: vertical only
+        border,     // int     — 0: duplicate edge pixels, 1: wrap
+        quality     // int     — 0–100 (100 = highest quality)
+    );
+    ```
+
+    Example — blur a background scene at σ=6:
+
+    ```cpp
+    auto bgScene = tvg::Scene::gen();
+    bgScene->add(bgImage);
+    bgScene->add(tvg::SceneEffect::GaussianBlur, 6.0, 0, 0, 80);
+    canvas->add(bgScene);
+    ```
+  </Accordion>
+  <Accordion title="DropShadow">
+    Render a blurred, colored shadow beneath the scene content.
+
+    ```cpp
+    scene->add(
+        tvg::SceneEffect::DropShadow,
+        r,           // int    — shadow color red (0–255)
+        g,           // int    — shadow color green (0–255)
+        b,           // int    — shadow color blue (0–255)
+        opacity,     // int    — shadow opacity (0–255)
+        angle,       // double — direction of shadow offset in degrees (0–360)
+        distance,    // double — offset distance in pixels
+        blur_sigma,  // double — blur radius; must be > 0
+        quality      // int    — 0–100 (100 = highest quality)
+    );
+    ```
+
+    Example — dark grey shadow offset at 135°, 12px away:
+
+    ```cpp
+    scene->add(
+        tvg::SceneEffect::DropShadow,
+        30, 30, 30, 200,    // dark grey, 78% opacity
+        135.0, 12.0,        // 135° direction, 12px distance
+        4.0, 90             // σ=4 blur, quality=90
+    );
+    ```
+  </Accordion>
+  <Accordion title="Fill">
+    Override all colors in the scene with a flat RGBA fill. Useful for silhouette effects.
+
+    ```cpp
+    scene->add(
+        tvg::SceneEffect::Fill,
+        r,        // int — red (0–255)
+        g,        // int — green (0–255)
+        b,        // int — blue (0–255)
+        opacity   // int — alpha (0–255)
+    );
+    ```
+
+    Example — red tint overlay:
+
+    ```cpp
+    scene->add(tvg::SceneEffect::Fill, 220, 50, 50, 128);
+    ```
+  </Accordion>
+  <Accordion title="Tint">
+    Remap the scene's luminance range between a "black" color and a "white" color, blended by an intensity factor.
+
+    ```cpp
+    scene->add(
+        tvg::SceneEffect::Tint,
+        black_r, black_g, black_b,   // int — color mapped to dark tones
+        white_r, white_g, white_b,   // int — color mapped to light tones
+        intensity                    // double — blend 0–100
+    );
+    ```
+
+    Example — sepia tint at 80% intensity:
+
+    ```cpp
+    scene->add(
+        tvg::SceneEffect::Tint,
+        112, 66, 20,     // dark brown for shadows
+        255, 220, 170,   // warm cream for highlights
+        80.0             // 80% intensity
+    );
+    ```
+  </Accordion>
+  <Accordion title="Tritone">
+    Map the scene's luminance to three distinct colors: one for shadows, one for midtones, and one for highlights. A blend factor controls the mix between the original and the tritone result.
+
+    ```cpp
+    scene->add(
+        tvg::SceneEffect::Tritone,
+        shadow_r,    shadow_g,    shadow_b,     // int — shadow color
+        midtone_r,   midtone_g,   midtone_b,    // int — midtone color
+        highlight_r, highlight_g, highlight_b,  // int — highlight color
+        blend                                   // int — 0–255 blend with original
+    );
+    ```
+
+    Example — vintage duotone look:
+
+    ```cpp
+    scene->add(
+        tvg::SceneEffect::Tritone,
+        20,  10,  40,   // deep purple shadows
+        120, 60,  160,  // violet midtones
+        255, 230, 100,  // golden highlights
+        200             // ~78% tritone, remainder original
+    );
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Finding objects by ID
+
+Every `Paint` has a public `id` field. You can set it on any paint before adding it:
+
+```cpp
+auto circle = tvg::Shape::gen();
+circle->id = 1001;
+scene->add(circle);
+```
+
+ThorVG's `Picture` class provides a `paint(id)` lookup for vector scenes loaded from SVG or Lottie files. For your own scene trees, walk the `paints()` list manually:
+
+```cpp
+for (auto* p : scene->paints()) {
+    if (p->id == 1001) {
+        // found the target paint
+    }
+}
+```
+
+## Parent traversal
+
+Any paint can report the scene or canvas root that owns it:
+
+```cpp
+const tvg::Paint* owner = circle->parent();
+```
+
+Returns `nullptr` if the paint has not been added to a container yet.
+
+## Nesting scenes
+
+Scenes can be nested arbitrarily. Each level composes its children and then participates as a single paint in its parent:
+
+```cpp
+auto outer = tvg::Scene::gen();
+outer->translate(50.0f, 50.0f);
+
+auto inner = tvg::Scene::gen();
+inner->scale(0.5f);
+inner->add(someShape);
+
+outer->add(inner);
+canvas->add(outer);
+```
+
+The inner scene is scaled by 0.5× in its own coordinate space, then translated 50px in both axes by the outer scene's transform.

@@ -1,0 +1,331 @@
+---
+title: "Canvas"
+description: "Learn how to create and use a ThorVG canvas — the rendering surface that owns your paint objects and drives the draw/sync cycle."
+keywords: ["canvas", "SwCanvas", "GlCanvas", "WgCanvas", "rendering", "draw", "sync", "ThorVG"]
+---
+
+A `tvg::Canvas` is the rendering surface where you compose and rasterize your scene. It manages a collection of `Paint` objects and drives the rendering pipeline through a simple add → draw → sync cycle.
+
+ThorVG provides three canvas implementations, each targeting a different rendering backend. You choose one at creation time; the rest of the API is identical.
+
+<CardGroup cols={2}>
+  <Card title="SwCanvas" icon="cpu" href="#swcanvas-software-rasterizer">
+    CPU-based software rasterizer. No GPU required. Best for embedded systems, IoT, server-side rendering, and headless environments.
+  </Card>
+  <Card title="GlCanvas" icon="display" href="#glcanvas-opengl">
+    Hardware-accelerated OpenGL 3.3 / OpenGL ES 3.0 / WebGL 2 backend. Suitable for desktop and mobile applications with an active GL context.
+  </Card>
+  <Card title="WgCanvas" icon="bolt" href="#wgcanvas-webgpu">
+    Next-generation WebGPU backend powered by compute shaders. Targets webgpu-native v0.27 or a browser that supports WebGPU.
+  </Card>
+  <Card title="Shared API" icon="code" href="#canvas-api">
+    All canvas types inherit from `tvg::Canvas` and expose the same `add`, `remove`, `draw`, `sync`, and `update` methods.
+  </Card>
+</CardGroup>
+
+## Initialization
+
+Before using any canvas, initialize the ThorVG engine and specify how many worker threads to use:
+
+```cpp
+tvg::Initializer::init(4);   // 4 worker threads; 0 = single-threaded
+```
+
+Shut it down when your application exits:
+
+```cpp
+tvg::Initializer::term();
+```
+
+## Canvas types
+
+<Tabs>
+  <Tab title="SwCanvas">
+
+### SwCanvas — software rasterizer
+
+`tvg::SwCanvas` renders entirely on the CPU. You allocate a pixel buffer yourself and hand it to the canvas.
+
+```cpp
+constexpr uint32_t WIDTH  = 800;
+constexpr uint32_t HEIGHT = 600;
+
+static uint32_t buffer[WIDTH * HEIGHT];
+
+auto canvas = tvg::SwCanvas::gen();
+
+canvas->target(
+    buffer,                      // pixel buffer owned by you
+    WIDTH,                       // stride (≥ width)
+    WIDTH,                       // image width in pixels
+    HEIGHT,                      // image height in pixels
+    tvg::ColorSpace::ARGB8888    // pixel layout
+);
+```
+
+**`target()` parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `buffer` | `uint32_t*` | Caller-allocated pixel buffer of size `stride × h` |
+| `stride` | `uint32_t` | Row stride in pixels (must be ≥ `w`) |
+| `w` | `uint32_t` | Render width in pixels |
+| `h` | `uint32_t` | Render height in pixels |
+| `cs` | `ColorSpace` | Pixel channel layout (see below) |
+
+**`ColorSpace` options:**
+
+| Value | Layout | Notes |
+|-------|--------|-------|
+| `ABGR8888` | Alpha, Blue, Green, Red | Alpha-premultiplied |
+| `ARGB8888` | Alpha, Red, Green, Blue | Alpha-premultiplied |
+| `ABGR8888S` | Alpha, Blue, Green, Red | Un-premultiplied (straight alpha) |
+| `ARGB8888S` | Alpha, Red, Green, Blue | Un-premultiplied (straight alpha) |
+| `Grayscale8` | Single channel | 8-bit grayscale |
+
+Enable smart (partial) rendering when creating the canvas:
+
+```cpp
+auto canvas = tvg::SwCanvas::gen(tvg::EngineOption::SmartRender);
+```
+
+  </Tab>
+  <Tab title="GlCanvas">
+
+### GlCanvas — OpenGL
+
+`tvg::GlCanvas` wraps an existing OpenGL context. It targets OpenGL 3.3 on desktop, OpenGL ES 3.0 on mobile, and WebGL 2 in browsers.
+
+```cpp
+auto canvas = tvg::GlCanvas::gen();
+
+canvas->target(
+    display,   // EGLDisplay handle; nullptr on non-EGL systems
+    surface,   // EGLSurface / HDC handle; nullptr on non-EGL systems
+    context,   // existing OpenGL context
+    0,         // framebuffer object ID (0 = default framebuffer)
+    width,     // render width in pixels
+    height,    // render height in pixels
+    tvg::ColorSpace::ABGR8888S   // currently only ABGR8888S is supported
+);
+```
+
+If `display` and `surface` are both `nullptr`, ThorVG assumes the GL context is already current and will not attempt to bind one.
+
+Build the GL engine:
+
+```bash
+meson setup builddir -Dengines=gl
+```
+
+For OpenGL ES-specific features:
+
+```bash
+meson setup builddir -Dengines=gl -Dextra=opengl_es
+```
+
+<Note>
+`GlCanvas` does not currently support `EngineOption::SmartRender`. Passing it is silently ignored.
+</Note>
+
+  </Tab>
+  <Tab title="WgCanvas">
+
+### WgCanvas — WebGPU
+
+`tvg::WgCanvas` uses the WebGPU API and its compute shaders for rendering. It targets webgpu-native v0.27 on native platforms and the browser WebGPU API on the web.
+
+```cpp
+auto canvas = tvg::WgCanvas::gen();
+
+canvas->target(
+    device,    // WGPUDevice handle; nullptr lets ThorVG assign one
+    instance,  // WGPUInstance context
+    target,    // WGPUSurface or WGPUTexture handle
+    width,     // render width in pixels
+    height,    // render height in pixels
+    tvg::ColorSpace::ABGR8888S,  // currently only ABGR8888S is supported
+    0          // 0 = surface target, 1 = texture target
+);
+```
+
+Build the WebGPU engine:
+
+```bash
+meson setup builddir -Dengines=wg
+```
+
+<Note>
+WebGPU support is cutting-edge. The API is functional but continues to evolve. Refer to the ThorVG release notes for compatibility updates.
+</Note>
+
+  </Tab>
+</Tabs>
+
+## Canvas API
+
+All canvas types inherit from `tvg::Canvas` and expose the same interface.
+
+### Adding and removing paints
+
+```cpp
+canvas->add(shape);               // append to the end of the root scene
+canvas->add(shape, before);       // insert before an existing paint
+canvas->remove(shape);            // remove a specific paint
+canvas->remove();                 // remove all paints
+```
+
+<Note>
+When you call `canvas->add(paint)`, ownership of the paint transfers to the canvas. The canvas frees all owned paints when you call `canvas->remove()` or when the canvas is destroyed — unless you called `paint->ref()` before adding it.
+</Note>
+
+### The rendering workflow
+
+<Steps>
+  <Step title="Add your paints">
+    Create your Paint objects and add them to the canvas in the order you want them rendered (back to front).
+
+    ```cpp
+    auto bg = tvg::Shape::gen();
+    bg->appendRect(0, 0, 800, 600);
+    bg->fill(30, 30, 30);
+    canvas->add(bg);
+
+    auto circle = tvg::Shape::gen();
+    circle->appendCircle(400, 300, 100, 100);
+    circle->fill(255, 80, 80);
+    canvas->add(circle);
+    ```
+  </Step>
+  <Step title="Draw">
+    Submit the rendering work. Drawing may run asynchronously if the thread count is greater than zero.
+
+    ```cpp
+    canvas->draw();
+    ```
+
+    Pass `true` to clear the target buffer to zero before drawing. You can skip this if the entire canvas is covered with opaque content:
+
+    ```cpp
+    canvas->draw(true);   // clear + draw
+    ```
+  </Step>
+  <Step title="Sync">
+    Block until the rendering pipeline has finished. Always call `sync()` after `draw()`, regardless of threading.
+
+    ```cpp
+    canvas->sync();
+    ```
+
+    After `sync()` returns, the pixel buffer (for `SwCanvas`) or the GPU framebuffer is ready to display or read.
+  </Step>
+</Steps>
+
+### Updating paints between frames
+
+When a paint's properties change between frames, tell the canvas so it can re-rasterize the affected region:
+
+```cpp
+// Update all modified paints
+canvas->update();
+
+// Update a single specific paint (more efficient)
+canvas->update(paint);
+```
+
+A full animation loop looks like this:
+
+```cpp
+while (running) {
+    // Advance animation state
+    animation->frame(animation->totalFrame() * progress);
+
+    // Notify the canvas about the changed paint
+    canvas->update(animation->picture());
+
+    // Re-render and present
+    canvas->draw();
+    canvas->sync();
+
+    // Read pixels from buffer (SwCanvas) or present surface (GlCanvas/WgCanvas)
+}
+```
+
+### Viewport
+
+Restrict rendering to a rectangular sub-region of the canvas. This is useful for clipping or partial updates:
+
+```cpp
+canvas->viewport(x, y, w, h);
+```
+
+You can only change the viewport after calling `sync()`. Calling it after `add()`, `remove()`, `update()`, or `draw()` returns `Result::InsufficientCondition`.
+
+### Listing paints
+
+Retrieve the ordered list of paints currently managed by the canvas:
+
+```cpp
+const std::list<tvg::Paint*>& paints = canvas->paints();
+```
+
+<Warning>
+Do not access `paints()` while the canvas is between `draw()` and `sync()`. Access is safe only after `sync()` has returned.
+</Warning>
+
+## Smart rendering
+
+`SwCanvas` supports smart partial rendering, which tracks changed regions between frames and redraws only what has changed. This is particularly effective for UIs and dashboards where most of the scene is static.
+
+```cpp
+auto canvas = tvg::SwCanvas::gen(tvg::EngineOption::SmartRender);
+```
+
+`EngineOption` values:
+
+| Value | Behavior |
+|-------|---------|
+| `EngineOption::Default` | Full-scene rendering on every frame |
+| `EngineOption::SmartRender` | Partial redraw of changed regions only |
+
+<Note>
+In highly dynamic scenes where most objects change every frame — such as full-screen animations or games — smart rendering may add overhead rather than save it. Benchmark both modes for your use case.
+</Note>
+
+## Complete example
+
+```cpp
+#include "thorvg.h"
+
+constexpr uint32_t W = 800, H = 600;
+static uint32_t buffer[W * H];
+
+int main()
+{
+    tvg::Initializer::init(4);
+
+    auto canvas = tvg::SwCanvas::gen();
+    canvas->target(buffer, W, W, H, tvg::ColorSpace::ARGB8888);
+
+    // Build the scene
+    auto rect = tvg::Shape::gen();
+    rect->appendRect(50, 50, 200, 200, 10, 10);
+    rect->fill(100, 149, 237);
+    canvas->add(rect);
+
+    auto circle = tvg::Shape::gen();
+    circle->appendCircle(400, 300, 120, 120);
+    circle->fill(255, 100, 100);
+    canvas->add(circle);
+
+    // Render
+    canvas->draw();
+    canvas->sync();
+
+    // buffer now contains the rendered ARGB pixels
+    // Write to file, display on screen, etc.
+
+    tvg::Initializer::term();
+    return 0;
+}
+```

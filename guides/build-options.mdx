@@ -1,0 +1,109 @@
+---
+title: "Build Options"
+description: "Configuring ThorVG's modular build system with Meson."
+---
+
+ThorVG uses [Meson](https://mesonbuild.com/) and is designed as a building-block library — enable only what you need.
+
+## All options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `engines` | array | `cpu` | Rasterizer backends: `cpu`, `gl`, `wg`, `all` |
+| `loaders` | array | `svg,lottie,ttf` | File format loaders |
+| `savers` | array | *(none)* | File format savers: `gif` |
+| `threads` | bool | `true` | Multi-threaded task scheduler |
+| `simd` | bool | `false` | CPU SIMD/vectorization |
+| `bindings` | array | *(none)* | API bindings: `capi` |
+| `tools` | array | *(none)* | CLI tools: `svg2png`, `lottie2gif` |
+| `extra` | array | `lottie_exp,openmp` | Extra features |
+| `static` | bool | `false` | Force static linking |
+| `tests` | bool | `false` | Build unit tests |
+| `log` | bool | `false` | Enable log messages |
+| `file` | bool | `true` | Enable file I/O calls |
+
+## Engines
+
+```bash
+meson setup builddir -Dengines=cpu          # default: software only
+meson setup builddir -Dengines=gl           # OpenGL/ES/WebGL
+meson setup builddir -Dengines=wg           # WebGPU
+meson setup builddir -Dengines="cpu,gl"     # both CPU and GL
+meson setup builddir -Dengines=all          # all backends
+```
+
+## Loaders
+
+```bash
+meson setup builddir -Dloaders="svg,lottie,ttf"         # default
+meson setup builddir -Dloaders="lottie,png,jpg,webp"    # Lottie + bitmaps
+meson setup builddir -Dloaders=all                       # everything
+meson setup builddir -Dloaders=""                        # none (minimal)
+```
+
+## Extra options
+
+```bash
+-Dextra="lottie_exp"   # Lottie expressions (default on)
+-Dextra="opengl_es"    # OpenGL ES-specific extensions
+-Dextra="openmp"       # OpenMP parallelism (default on)
+-Dextra=""             # disable all extras (smallest binary)
+```
+
+## Common configurations
+
+<Tabs>
+  <Tab title="Default">
+    ```bash
+    meson setup builddir
+    ninja -C builddir install
+    ```
+    CPU renderer, SVG + Lottie + TTF loaders, multi-threading, Lottie expressions.
+  </Tab>
+  <Tab title="Minimal Lottie">
+    ```bash
+    meson setup builddir \
+      -Dloaders="lottie" \
+      -Dextra=""
+    ninja -C builddir install
+    ```
+    Lottie-only, no expressions — smallest possible binary for MCU targets.
+  </Tab>
+  <Tab title="Full-featured">
+    ```bash
+    meson setup builddir \
+      -Dengines=all \
+      -Dloaders=all \
+      -Dsavers=gif \
+      -Dsimd=true \
+      -Dbindings="capi" \
+      -Dtools=all
+    ninja -C builddir install
+    ```
+  </Tab>
+  <Tab title="Web (Emscripten)">
+    ```bash
+    meson setup builddir \
+      --cross-file cross/wasm.txt \
+      -Dengines="gl,wg" \
+      -Dloaders="svg,lottie,ttf,png"
+    ninja -C builddir
+    ```
+  </Tab>
+</Tabs>
+
+## Static library
+
+```bash
+meson setup builddir -Dstatic=true
+```
+
+Forces all ThorVG modules to link statically. Useful for embedded targets where dynamic linking is unavailable.
+
+## SIMD acceleration
+
+```bash
+meson setup builddir -Dsimd=true
+```
+
+Enables CPU SIMD instructions (SSE/NEON) for the software renderer. Improves performance on platforms that support it.

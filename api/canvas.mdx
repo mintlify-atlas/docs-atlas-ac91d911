@@ -1,0 +1,156 @@
+---
+title: "Canvas"
+description: "Canvas classes for software, OpenGL, and WebGPU rendering."
+---
+
+The Canvas is the rendering target. ThorVG provides three canvas types depending on the rendering backend. All share a common base `tvg::Canvas` API.
+
+## Common Canvas API
+
+### `add()`
+```cpp
+Result add(Paint* target, Paint* at = nullptr) noexcept;
+```
+Adds a paint object to the canvas. Ownership transfers to the canvas unless you call `target->ref()` first. Insert before `at` if specified.
+
+### `remove()`
+```cpp
+Result remove(Paint* paint = nullptr) noexcept;
+```
+Removes a paint from the canvas. Pass `nullptr` to remove all paints.
+
+### `draw()`
+```cpp
+Result draw(bool clear = true) noexcept;
+```
+Triggers rendering. May execute asynchronously. Always follow with `sync()`.
+
+### `sync()`
+```cpp
+Result sync() noexcept;
+```
+Blocks until rendering is complete. Must be called after `draw()`.
+
+### `update()`
+```cpp
+Result update(Paint* paint = nullptr) noexcept;
+```
+Marks a paint (or all paints if `nullptr`) as needing redraw. Call this after modifying a paint between frames.
+
+### `viewport()`
+```cpp
+Result viewport(int32_t x, int32_t y, int32_t w, int32_t h) noexcept;
+```
+Sets the rendering viewport within the canvas target.
+
+### `paints()`
+```cpp
+const std::list<Paint*>& paints() const noexcept;
+```
+Returns the list of paint objects currently on the canvas (read-only).
+
+---
+
+## SwCanvas
+
+Software (CPU) rasterizer. No external dependencies required.
+
+```cpp
+static SwCanvas* gen(EngineOption op = EngineOption::Default) noexcept;
+```
+
+<ParamField path="op" type="EngineOption">
+  `EngineOption::Default` — standard rendering.  
+  `EngineOption::SmartRender` — partial/dirty-region rendering for scenes with few changes per frame.
+</ParamField>
+
+### `target()`
+```cpp
+Result target(uint32_t* buffer, uint32_t stride, uint32_t w, uint32_t h, ColorSpace cs) noexcept;
+```
+
+<ParamField path="buffer" type="uint32_t*" required>
+  Caller-allocated pixel buffer of size `stride × h`.
+</ParamField>
+<ParamField path="stride" type="uint32_t" required>
+  Row stride in pixels. Must be ≥ `w`.
+</ParamField>
+<ParamField path="w" type="uint32_t" required>Width in pixels.</ParamField>
+<ParamField path="h" type="uint32_t" required>Height in pixels.</ParamField>
+<ParamField path="cs" type="ColorSpace" required>
+  Pixel format. Common values: `ARGB8888`, `ABGR8888`, `ARGB8888S`, `ABGR8888S`, `Grayscale8`.
+</ParamField>
+
+**Example:**
+```cpp
+static uint32_t buffer[800 * 600];
+auto canvas = tvg::SwCanvas::gen();
+canvas->target(buffer, 800, 800, 600, tvg::ColorSpace::ARGB8888);
+```
+
+---
+
+## GlCanvas
+
+OpenGL / OpenGL ES / WebGL2 backend. Build with `-Dengines=gl`.
+
+```cpp
+static GlCanvas* gen(EngineOption op = EngineOption::Default) noexcept;
+```
+
+### `target()`
+```cpp
+Result target(void* display, void* surface, void* context,
+              int32_t id, uint32_t w, uint32_t h, ColorSpace cs) noexcept;
+```
+
+<ParamField path="display" type="void*">EGLDisplay handle. Pass `nullptr` for non-EGL systems.</ParamField>
+<ParamField path="surface" type="void*">EGLSurface or HDC (WGL). Pass `nullptr` for non-EGL/WGL.</ParamField>
+<ParamField path="context" type="void*">Active OpenGL context handle.</ParamField>
+<ParamField path="id" type="int32_t">Framebuffer Object (FBO) ID. `0` targets the main surface.</ParamField>
+<ParamField path="w" type="uint32_t" required>Width in pixels.</ParamField>
+<ParamField path="h" type="uint32_t" required>Height in pixels.</ParamField>
+<ParamField path="cs" type="ColorSpace" required>Must be `ColorSpace::ABGR8888S` (GL_RGBA8).</ParamField>
+
+<Note>
+  If `display` and `surface` are `nullptr`, ThorVG assumes an OpenGL context is already current.
+</Note>
+
+---
+
+## WgCanvas
+
+WebGPU backend. Build with `-Dengines=wg`.
+
+```cpp
+static WgCanvas* gen(EngineOption op = EngineOption::Default) noexcept;
+```
+
+### `target()`
+```cpp
+Result target(void* device, void* instance, void* target,
+              uint32_t w, uint32_t h, ColorSpace cs, int type = 0) noexcept;
+```
+
+<ParamField path="device" type="void*">WGPUDevice handle. Pass `nullptr` to let ThorVG assign one.</ParamField>
+<ParamField path="instance" type="void*">WGPUInstance context.</ParamField>
+<ParamField path="target" type="void*">WGPUSurface or WGPUTexture handle.</ParamField>
+<ParamField path="type" type="int">`0` = surface, `1` = texture.</ParamField>
+
+---
+
+## Animation loop pattern
+
+```cpp
+// Setup (once)
+auto canvas = tvg::SwCanvas::gen();
+canvas->target(buffer, W, W, H, tvg::ColorSpace::ARGB8888);
+canvas->add(myPaint);
+
+// Per-frame update
+myPaint->rotate(angle);
+canvas->update(myPaint);
+canvas->draw();
+canvas->sync();
+// buffer now contains the rendered frame
+```

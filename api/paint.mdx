@@ -1,0 +1,182 @@
+---
+title: "Paint"
+description: "The abstract base class for all drawable objects in ThorVG."
+---
+
+`tvg::Paint` is the abstract base for `Shape`, `Picture`, `Scene`, and `Text`. All transform, compositing, and visibility methods are defined here.
+
+## Transform
+
+```cpp
+Result rotate(float degree) noexcept;
+Result scale(float factor) noexcept;
+Result translate(float x, float y) noexcept;
+Result transform(const Matrix& m) noexcept;
+Matrix& transform() noexcept;  // get current matrix
+```
+
+<Note>
+  `rotate()`, `scale()`, and `translate()` are convenience wrappers. Using `transform()` with a custom matrix disables them — `InsufficientCondition` is returned if you mix them.
+</Note>
+
+## Opacity
+
+```cpp
+Result opacity(uint8_t o) noexcept;  // 0 = transparent, 255 = opaque
+uint8_t opacity() const noexcept;
+```
+
+## Visibility
+
+```cpp
+Result visible(bool on) noexcept;
+bool visible() const noexcept;
+```
+
+Hidden paints still participate in internal update processing but are excluded from rendering output.
+
+## Blending
+
+```cpp
+Result blend(BlendMethod method) noexcept;
+```
+
+| BlendMethod | Formula |
+|-------------|---------|
+| `Normal` | Alpha blend (default) |
+| `Multiply` | `S × D` |
+| `Screen` | `S + D − S×D` |
+| `Overlay` | Multiply or Screen depending on D |
+| `Darken` | `min(S, D)` |
+| `Lighten` | `max(S, D)` |
+| `ColorDodge` | `D / (255 − S)` |
+| `ColorBurn` | `255 − (255−D) / S` |
+| `HardLight` | Overlay with roles reversed |
+| `SoftLight` | Soft overlay |
+| `Difference` | `\|S − D\|` |
+| `Exclusion` | `S + D − 2×S×D` |
+| `Hue` | HSL hue from S, saturation+lightness from D |
+| `Saturation` | HSL saturation from S |
+| `Color` | Hue+saturation from S, lightness from D |
+| `Luminosity` | Lightness from S |
+| `Add` | `S + D` |
+| `Composition` | For intermediate Scene/Picture layers |
+
+## Masking
+
+```cpp
+Result mask(Paint* target, MaskMethod method) noexcept;
+MaskMethod mask(const Paint** target) const noexcept;
+```
+
+| MaskMethod | Description |
+|-----------|-------------|
+| `None` | No masking |
+| `Alpha` | Target pixels used as alpha |
+| `InvAlpha` | Complement of target alpha |
+| `Luma` | Grayscale of target as alpha |
+| `InvLuma` | Complement of grayscale |
+| `Add` | `T×TA + S×(255−TA)` |
+| `Subtract` | `T×TA − S×(255−TA)` |
+| `Intersect` | `T × min(TA, SA)` |
+| `Difference` | `\|T − S×(255−TA)\|` |
+| `Lighten` | Highest transparency at intersections |
+| `Darken` | Lowest transparency at intersections |
+
+**Example:**
+```cpp
+auto mask = tvg::Shape::gen();
+mask->appendCircle(200, 200, 100, 100);
+mask->fill(255, 255, 255);
+
+auto content = tvg::Picture::gen();
+content->load("image.png");
+content->mask(mask, tvg::MaskMethod::Alpha);
+canvas->add(content);
+```
+
+## Clipping
+
+```cpp
+Result clip(Shape* clipper) noexcept;
+Shape* clip() const noexcept;
+```
+
+Restricts the paint's rendered area to the clipper shape's filled region.
+
+```cpp
+auto clipShape = tvg::Shape::gen();
+clipShape->appendCircle(200, 200, 150, 150);
+
+auto picture = tvg::Picture::gen();
+picture->load("photo.jpg");
+picture->clip(clipShape);
+canvas->add(picture);
+```
+
+## Bounds
+
+```cpp
+Result bounds(float* x, float* y, float* w, float* h) noexcept;  // AABB
+Result bounds(Point* pt4) noexcept;                               // OBB (4 points)
+```
+
+Both require the paint to have been updated in a canvas first (after `draw()` + `sync()`).
+
+## Hit testing
+
+```cpp
+bool intersects(int32_t x, int32_t y, int32_t w = 1, int32_t h = 1) noexcept;
+```
+
+Returns `true` if the region overlaps the filled area. Useful for pointer/touch hit detection.
+
+## Duplication
+
+```cpp
+Paint* duplicate() const noexcept;
+```
+
+Creates a deep copy with all properties.
+
+## Ownership / reference counting
+
+```cpp
+uint16_t ref() noexcept;          // increment ref count
+uint16_t unref(bool free = true) noexcept;  // decrement; deletes at 0 if free=true
+uint16_t refCnt() const noexcept;
+static void rel(Paint* paint) noexcept;     // safe release helper
+```
+
+By default, canvas and scene take ownership of added paints. Call `ref()` before adding if you need to keep ownership.
+
+## Type checking
+
+```cpp
+virtual Type type() const noexcept = 0;
+```
+
+| Type value | Class |
+|-----------|-------|
+| `Type::Shape` | `tvg::Shape` |
+| `Type::Scene` | `tvg::Scene` |
+| `Type::Picture` | `tvg::Picture` |
+| `Type::Text` | `tvg::Text` |
+| `Type::LinearGradient` | `tvg::LinearGradient` |
+| `Type::RadialGradient` | `tvg::RadialGradient` |
+
+## Identity
+
+```cpp
+uint32_t id = 0;
+```
+
+Assign a unique integer ID to locate a paint within a scene:
+
+```cpp
+shape->id = 42;
+// Later:
+for (auto& p : scene->paints()) {
+    if (p->id == 42) { /* found it */ }
+}
+```

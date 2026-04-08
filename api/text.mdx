@@ -1,0 +1,137 @@
+---
+title: "Text"
+description: "Unicode text rendering with TTF fonts."
+---
+
+`tvg::Text` inherits from `Paint` and renders UTF-8 text using TTF fonts.
+
+<Note>
+  Text rendering requires `-Dloaders=ttf` (included in the default build).
+</Note>
+
+## Factory
+
+```cpp
+static Text* gen() noexcept;
+```
+
+## Font loading (static)
+
+Load a font file once; it is cached and shared across all `Text` objects:
+
+```cpp
+// Load from file
+static Result load(const char* filename) noexcept;
+
+// Load from memory buffer
+static Result load(const char* name, const char* data, uint32_t size,
+                   const char* mimeType = "ttf", bool copy = false) noexcept;
+
+// Unload
+static Result unload(const char* filename) noexcept;
+```
+
+## Setting font and text
+
+```cpp
+Result font(const char* name) noexcept;   // font family name (matches loaded font)
+Result size(float size) noexcept;         // font size in points
+Result text(const char* text) noexcept;   // UTF-8 string
+const char* text() const noexcept;        // get current string (experimental)
+```
+
+If `name` is `nullptr`, ThorVG selects a fallback font.
+
+## Color and style
+
+```cpp
+Result fill(uint8_t r, uint8_t g, uint8_t b) noexcept;
+Result fill(Fill* f) noexcept;                           // gradient fill
+Result outline(float width, uint8_t r, uint8_t g, uint8_t b) noexcept;
+Result italic(float shear = 0.18f) noexcept;
+```
+
+## Layout
+
+```cpp
+// Set a layout box; text wraps/aligns within it
+Result layout(float w, float h) noexcept;  // 0 = unconstrained
+
+// Alignment/anchor (0.0=start, 0.5=center, 1.0=end)
+Result align(float x, float y) noexcept;
+
+// Wrapping mode
+Result wrap(TextWrap mode) noexcept;
+
+// Spacing scale factors
+Result spacing(float letter, float line) noexcept;
+
+// Query line count after wrapping
+uint32_t lines() noexcept;  // experimental
+```
+
+**TextWrap values:**
+
+| Value | Behavior |
+|-------|---------|
+| `None` | No wrapping (default) |
+| `Character` | Break at character boundaries |
+| `Word` | Break at word boundaries |
+| `Smart` | Word wrap, fall back to character wrap |
+| `Ellipsis` | Truncate with `...` |
+
+## Metrics (experimental)
+
+```cpp
+Result metrics(TextMetrics& metrics) const noexcept;
+Result metrics(const char* ch, GlyphMetrics& metrics) const noexcept;
+```
+
+`TextMetrics` fields: `ascent`, `descent`, `linegap`, `advance`.  
+`GlyphMetrics` fields: `advance`, `bearing`, `min` (Point), `max` (Point).
+
+## Example
+
+```cpp
+// Load font (once at startup)
+tvg::Text::load("fonts/NotoSans-Regular.ttf");
+
+// Create text object
+auto label = tvg::Text::gen();
+label->font("NotoSans-Regular");
+label->size(24.0f);
+label->text("Hello, ThorVG!");
+label->fill(30, 30, 30);
+label->translate(50, 100);
+canvas->add(label);
+```
+
+## Multi-line with wrapping
+
+```cpp
+auto para = tvg::Text::gen();
+para->font("NotoSans-Regular");
+para->size(16.0f);
+para->text("This is a longer paragraph that should wrap within the layout box.");
+para->layout(300, 0);           // constrain to 300px wide
+para->wrap(tvg::TextWrap::Word);
+para->fill(50, 50, 50);
+para->translate(50, 50);
+canvas->add(para);
+```
+
+## Gradient fill on text
+
+```cpp
+auto grad = tvg::LinearGradient::gen();
+grad->linear(0, 0, 200, 0);
+tvg::Fill::ColorStop stops[2] = {{0.0f, 255,80,0,255}, {1.0f, 0,80,255,255}};
+grad->colorStops(stops, 2);
+
+auto title = tvg::Text::gen();
+title->font("NotoSans-Bold");
+title->size(48.0f);
+title->text("ThorVG");
+title->fill(grad);
+canvas->add(title);
+```

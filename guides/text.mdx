@@ -1,0 +1,245 @@
+---
+title: "Text"
+description: "Rendering Unicode text with TTF fonts using ThorVG."
+---
+
+ThorVG can render Unicode text by loading TrueType Font (TTF) files. The `Text` class inherits from `Paint`, so all transform, opacity, and blend operations work on text objects exactly as they do on shapes.
+
+<Note>
+  The TTF text loader must be enabled at build time with `-Dloaders=ttf` (or included in the loaders list). Without this flag, `Text::load()` returns `Result::NonSupport`.
+</Note>
+
+---
+
+## Loading a font
+
+Font files are loaded globally (not per-text-object) using the static `Text::load()` method. ThorVG caches fonts by file path, so loading the same file twice is a no-op.
+
+```cpp
+#include <thorvg.h>
+using namespace tvg;
+
+// static Result Text::load(const char* filename)
+auto result = Text::load("/path/to/fonts/NotoSans-Regular.ttf");
+if (result != Result::Success) {
+    // handle error: file not found, unsupported format, etc.
+}
+```
+
+### Loading from memory
+
+```cpp
+// static Result Text::load(const char* name, const char* data,
+//                           uint32_t size,
+//                           const char* mimeType = "ttf",
+//                           bool copy = false)
+
+const char* fontData = /* pointer to TTF bytes */;
+uint32_t fontBytes   = /* byte count */;
+
+Text::load("MyFont", fontData, fontBytes, "ttf", false);
+// Reference this font by name "MyFont" in Text::font() calls
+```
+
+### Unloading a font
+
+```cpp
+// static Result Text::unload(const char* filename)
+Text::unload("/path/to/fonts/NotoSans-Regular.ttf");
+```
+
+Font data in use by an active `Text` object is not immediately released until all references are gone.
+
+---
+
+## Creating and configuring a Text object
+
+```cpp
+// static Text* Text::gen()
+auto label = Text::gen();
+
+// Result font(const char* name)  — select loaded font by name
+label->font("NotoSans-Regular");
+
+// Result size(float size)  — font size in points; must be > 0
+label->size(32.0f);
+
+// Result text(const char* text)  — assign the UTF-8 string to render
+label->text("Hello, ThorVG!");
+
+canvas->add(label);
+```
+
+If `font()` is called with `nullptr`, ThorVG selects an available fallback font.
+
+---
+
+## Text color and gradient fill
+
+```cpp
+// Solid color — Result fill(uint8_t r, uint8_t g, uint8_t b)
+// (Text::fill does not take an alpha parameter)
+label->fill(255, 255, 255);   // white text
+
+// Gradient fill — Result fill(Fill* f)
+auto grad = LinearGradient::gen();
+grad->linear(0, 0, 200, 0);
+
+Fill::ColorStop stops[2] = {
+    {0.0f, 255, 100, 0,   255},
+    {1.0f, 255, 255, 0,   255}
+};
+grad->colorStops(stops, 2);
+label->fill(grad);
+```
+
+---
+
+## Text outline (stroke)
+
+```cpp
+// Result outline(float width, uint8_t r, uint8_t g, uint8_t b)
+label->outline(2.0f, 0, 0, 0);   // 2 px black outline
+label->outline(0, 0, 0, 0);       // disable outline (width = 0)
+```
+
+---
+
+## Text wrapping
+
+`TextWrap` controls how text behaves when it exceeds the available layout width. Set a layout box first with `layout()`.
+
+```cpp
+// Result layout(float w, float h)  — 0 means unconstrained on that axis
+label->layout(300, 0);   // constrain width to 300 px, height unconstrained
+
+// Result wrap(TextWrap mode)
+label->wrap(TextWrap::Word);
+```
+
+| Value | Behavior |
+|-------|----------|
+| `TextWrap::None` | No wrapping; text overflows (default) |
+| `TextWrap::Character` | Break at character boundaries |
+| `TextWrap::Word` | Break at word boundaries |
+| `TextWrap::Smart` | Word-wrap first, fall back to character-wrap |
+| `TextWrap::Ellipsis` | Truncate with "…" at overflow point |
+
+---
+
+## Alignment and layout
+
+```cpp
+// Result align(float x, float y)
+// x: 0=left, 0.5=center, 1=right
+// y: 0=top,  0.5=middle, 1=bottom
+label->align(0.5f, 0.0f);   // center-align horizontally
+
+// Result layout(float w, float h)
+label->layout(400, 200);
+```
+
+---
+
+## Letter and line spacing
+
+```cpp
+// Result spacing(float letter, float line)
+// Scale factors relative to font defaults; must be >= 0
+label->spacing(1.2f, 1.5f);   // 20% wider letters, 50% taller line gap
+```
+
+---
+
+## Italic style
+
+Apply a synthetic italic effect via shear transformation — no italic font file needed:
+
+```cpp
+// Result italic(float shear = 0.18f)  — shear clamped to [0.0, 0.5]
+label->italic();         // default shear (0.18)
+label->italic(0.3f);     // stronger slant
+label->italic(0.0f);     // no slant
+```
+
+---
+
+## Transform and opacity
+
+Because `Text` extends `Paint`, all standard paint operations apply:
+
+```cpp
+label->translate(100, 200);
+label->rotate(15.0f);
+label->scale(1.5f);
+label->opacity(200);   // 0–255; 255 = fully opaque
+```
+
+---
+
+## Font metrics
+
+<Warning>
+  `Text::metrics()` is an experimental API and may change in future releases.
+</Warning>
+
+```cpp
+// Result metrics(TextMetrics& metrics) const
+// TextMetrics fields: ascent, descent, linegap, advance
+// Must call font() and size() before querying metrics
+
+TextMetrics m;
+if (label->metrics(m) == Result::Success) {
+    float lineHeight       = m.advance;   // ascent - descent + linegap
+    float topToBaseline    = m.ascent;
+    float baselineToBottom = m.descent;   // typically negative in TTF
+    float extraLeading     = m.linegap;
+}
+```
+
+Per-glyph metrics:
+
+```cpp
+// Result metrics(const char* ch, GlyphMetrics& metrics) const
+// GlyphMetrics fields: advance, bearing, min (Point), max (Point)
+
+GlyphMetrics gm;
+if (label->metrics("A", gm) == Result::Success) {
+    float glyphWidth = gm.max.x - gm.min.x;
+}
+```
+
+---
+
+## Complete example
+
+```cpp
+#include <thorvg.h>
+using namespace tvg;
+
+Initializer::init(0);
+
+auto canvas = SwCanvas::gen();
+uint32_t buffer[800 * 200];
+canvas->target(buffer, 800, 800, 200, ColorSpace::ARGB8888);
+
+// 1. Load the font file globally (cached by path)
+Text::load("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf");
+
+// 2. Create the Text object
+auto label = Text::gen();
+label->font("NotoSans-Regular");
+label->size(48.0f);
+label->text("Hello, ThorVG!");
+label->fill(30, 30, 30);   // dark grey
+label->translate(40, 80);
+
+canvas->add(label);
+canvas->draw();
+canvas->sync();
+
+// 3. Unload the font when done
+Text::unload("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf");
+
+Initializer::term();
+```

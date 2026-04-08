@@ -1,0 +1,198 @@
+---
+title: "Images and Pictures"
+description: "Loading and rendering SVG, PNG, JPG, WebP, and raw images."
+---
+
+The `Picture` class loads and renders image files. Like all ThorVG paints it inherits transform, opacity, blend, mask, and clip capabilities from `Paint`.
+
+<Note>
+  Which image formats are available depends on the loaders compiled into ThorVG. Enable them at build time with the `-Dloaders=` option. For example: `-Dloaders=svg,png,jpg,webp`.
+</Note>
+
+## Creating a Picture
+
+```cpp
+#include <thorvg.h>
+using namespace tvg;
+
+// static Picture* Picture::gen()
+auto picture = Picture::gen();
+```
+
+Release with `Paint::rel(picture)` if you do not add it to a canvas.
+
+---
+
+## Loading images
+
+<Tabs>
+  <Tab title="From file">
+    ```cpp
+    // Result load(const char* filename)
+    // ThorVG caches decoded data by file path — reloading the same file reuses the cache
+    auto picture = Picture::gen();
+
+    auto result = picture->load("artwork.svg");
+    if (result != Result::Success) {
+        // handle: file not found, unsupported format, etc.
+    }
+
+    canvas->add(picture);
+    ```
+  </Tab>
+  <Tab title="From memory">
+    ```cpp
+    // Result load(const char* data, uint32_t size, const char* mimeType,
+    //             const char* rpath = nullptr, bool copy = false)
+    // data:     pointer to the raw file bytes (null-terminated for text formats)
+    // size:     byte count
+    // mimeType: "svg", "svg+xml", "png", "jpg", "jpeg", "webp", etc.
+    //           pass nullptr to let ThorVG detect the format automatically
+    // rpath:    resource directory for files referenced by the loaded data
+    // copy:     true = engine copies data; false = caller retains ownership
+
+    const char* svgData = "<svg>...</svg>";
+    uint32_t    svgSize = static_cast<uint32_t>(strlen(svgData));
+
+    auto picture = Picture::gen();
+    picture->load(svgData, svgSize, "svg", nullptr, false);
+
+    canvas->add(picture);
+    ```
+  </Tab>
+  <Tab title="Raw bitmap">
+    ```cpp
+    // Result load(const uint32_t* data, uint32_t w, uint32_t h,
+    //             ColorSpace cs, bool copy = false)
+    // data: pointer to a 32-bit-per-pixel bitmap buffer
+    // cs:   ColorSpace describing how bytes are packed
+
+    uint32_t pixels[64 * 64] = { /* ARGB8888 pixel data */ };
+
+    auto picture = Picture::gen();
+    picture->load(pixels, 64, 64, ColorSpace::ARGB8888, false);
+
+    canvas->add(picture);
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Resizing
+
+```cpp
+// Result size(float w, float h) — resize while preserving aspect ratio
+// The smaller of the two scale factors is applied to both axes
+picture->size(320, 240);
+
+// Result size(float* w, float* h) const — query the natural dimensions
+float w, h;
+picture->size(&w, &h);
+```
+
+---
+
+## Origin point
+
+The origin controls which point of the picture aligns with its translated position:
+
+```cpp
+// Result origin(float x, float y)
+// Normalized range: (0, 0) = top-left corner, (1, 1) = bottom-right
+picture->origin(0.5f, 0.5f);   // center the image on its translate position
+picture->translate(400, 300);  // image center is now at canvas (400, 300)
+```
+
+---
+
+## Image filtering
+
+<Note>
+  `Picture::filter()` is an experimental API and may change in future releases.
+</Note>
+
+```cpp
+// Result filter(FilterMethod method)
+// FilterMethod::Bilinear — smooth interpolation (default)
+// FilterMethod::Nearest  — fast nearest-neighbor sampling
+
+picture->filter(FilterMethod::Bilinear);
+picture->filter(FilterMethod::Nearest);
+```
+
+---
+
+## Supported formats and build flags
+
+| Format | MIME type strings | Build flag |
+|--------|-------------------|------------|
+| SVG | `svg`, `svg+xml` | `-Dloaders=svg` |
+| PNG | `png` | `-Dloaders=png` |
+| JPG | `jpg`, `jpeg` | `-Dloaders=jpg` |
+| WebP | `webp` | `-Dloaders=webp` |
+| Raw bitmap | *(use `load(uint32_t*)` overload)* | always available |
+| Lottie JSON | `lot`, `lottie+json` | `-Dloaders=lottie` |
+
+Multiple loaders can be combined: `-Dloaders=svg,png,jpg,webp`.
+
+---
+
+## Complete examples
+
+### Load an SVG file
+
+```cpp
+#include <thorvg.h>
+using namespace tvg;
+
+Initializer::init(0);
+
+auto canvas = SwCanvas::gen();
+uint32_t buffer[800 * 600];
+canvas->target(buffer, 800, 800, 600, ColorSpace::ARGB8888);
+
+auto svg = Picture::gen();
+svg->load("tiger.svg");
+svg->size(400, 400);
+svg->translate(200, 100);
+
+canvas->add(svg);
+canvas->draw();
+canvas->sync();
+
+Initializer::term();
+```
+
+### Load a PNG from file
+
+```cpp
+auto png = Picture::gen();
+png->load("logo.png");
+
+// Query the natural size of the loaded image
+float w, h;
+png->size(&w, &h);
+
+// Scale up 2x
+png->size(w * 2, h * 2);
+canvas->add(png);
+```
+
+### Load from a memory buffer
+
+```cpp
+// pngBytes: pointer to PNG file data in memory
+// pngByteCount: number of bytes
+auto picture = Picture::gen();
+picture->load(
+    reinterpret_cast<const char*>(pngBytes),
+    pngByteCount,
+    "png",
+    nullptr,
+    true    // copy = true: engine takes its own copy of the data
+);
+
+picture->size(128, 128);
+canvas->add(picture);
+```

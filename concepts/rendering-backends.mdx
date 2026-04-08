@@ -1,0 +1,222 @@
+---
+title: "Rendering backends"
+description: "Compare ThorVG's four rendering backends — software CPU, OpenGL, and WebGPU — and learn when to use each one."
+keywords: ["rendering backend", "SwCanvas", "GlCanvas", "WgCanvas", "OpenGL", "WebGPU", "SIMD", "ThorVG"]
+---
+
+ThorVG separates your scene description from the rendering implementation. You build the same scene graph regardless of the backend; you only choose a different canvas class at startup.
+
+## Overview
+
+<CardGroup cols={2}>
+  <Card title="Software (CPU)" icon="microchip">
+    `tvg::SwCanvas` — pure C++ rasterizer, no GPU required. Runs anywhere a C++ standard library is available, including microcontrollers.
+  </Card>
+  <Card title="OpenGL" icon="display">
+    `tvg::GlCanvas` — hardware-accelerated rasterization via OpenGL 3.3, OpenGL ES 3.0, or WebGL 2.
+  </Card>
+  <Card title="WebGPU" icon="bolt">
+    `tvg::WgCanvas` — next-generation GPU API with compute shaders. Targets webgpu-native v0.27 or a browser with WebGPU support.
+  </Card>
+  <Card title="WebAssembly / Web" icon="globe">
+    All three backends compile to WebAssembly. The software backend runs via WebAssembly; the GL backend targets WebGL 2; the WgCanvas targets the browser WebGPU API.
+  </Card>
+</CardGroup>
+
+## Software backend (SwCanvas)
+
+The software backend is ThorVG's default and most portable rendering engine.
+
+### Characteristics
+
+- **No external dependencies.** The core library is entirely self-contained at approximately 150 KB.
+- **SIMD acceleration.** Optional vectorized inner loops via `-Dsimd=true`. Disabled by default to maximize portability.
+- **Smart partial rendering.** The only backend that currently supports `EngineOption::SmartRender` — track changed regions and redraw only what has changed.
+- **Thread pool.** The internal task scheduler distributes encoding, decoding, and rendering work across worker threads. Enable with `-Dthreads=true` (on by default).
+- **CPU performance.** In representative vector rendering benchmarks with 5,000 semi-transparent primitives at 2K resolution (Apple M1), ThorVG's software rasterizer achieves an average of **~1.8× faster throughput** than a widely-used alternative.
+
+### When to use it
+
+- Embedded systems, IoT devices, MCUs (tested on ESP32)
+- Server-side or headless rendering (no display server required)
+- Applications targeting maximum portability across unknown hardware
+- Tooling such as SVG-to-PNG or Lottie-to-GIF converters
+
+### Build options
+
+```bash
+# Default build (CPU engine enabled by default)
+meson setup builddir
+
+# Enable SIMD vectorization
+meson setup builddir -Dsimd=true
+
+# Disable the threading scheduler
+meson setup builddir -Dthreads=false
+```
+
+### Setup
+
+```cpp
+#include "thorvg.h"
+
+constexpr uint32_t W = 800, H = 600;
+static uint32_t buffer[W * H];
+
+tvg::Initializer::init(4);   // 4 worker threads
+
+auto canvas = tvg::SwCanvas::gen();
+// or, with smart rendering:
+auto canvas = tvg::SwCanvas::gen(tvg::EngineOption::SmartRender);
+
+canvas->target(buffer, W, W, H, tvg::ColorSpace::ARGB8888);
+```
+
+## OpenGL backend (GlCanvas)
+
+The OpenGL backend offloads rasterization to the GPU and targets applications that already own a GL context.
+
+### Characteristics
+
+- **Supported APIs:** OpenGL 3.3 (desktop), OpenGL ES 3.0 (mobile), WebGL 2 (browser)
+- **Context ownership:** ThorVG uses your existing context; it does not create one.
+- **Full feature parity:** All ThorVG vector rendering features (shapes, gradients, text, images, effects) work in the GL backend.
+- **No SmartRender:** `EngineOption::SmartRender` is not currently supported and is silently ignored.
+
+### When to use it
+
+- Desktop and mobile games or creative tools that already render with OpenGL
+- Environments where a GPU is available and a GL context is managed by the application or framework
+
+### Build options
+
+```bash
+# Enable the GL engine
+meson setup builddir -Dengines=gl
+
+# Include both CPU and GL engines
+meson setup builddir -Dengines=cpu,gl
+
+# Enable OpenGL ES-specific extensions
+meson setup builddir -Dengines=gl -Dextra=opengl_es
+```
+
+### Setup
+
+```cpp
+auto canvas = tvg::GlCanvas::gen();
+
+canvas->target(
+    nullptr,                      // EGLDisplay; nullptr on non-EGL systems
+    nullptr,                      // EGLSurface; nullptr on non-EGL systems
+    glContext,                    // your current GL context
+    0,                            // FBO ID (0 = default framebuffer)
+    width, height,
+    tvg::ColorSpace::ABGR8888S    // currently required color space
+);
+```
+
+## WebGPU backend (WgCanvas)
+
+The WebGPU backend is ThorVG's most advanced GPU rendering path. It uses compute shaders and the low-overhead WebGPU API for maximum GPU utilization.
+
+<Note>
+WebGPU support is cutting-edge and the API is still evolving. The backend is functional and supports the full ThorVG feature set, but review ThorVG release notes for compatibility updates with webgpu-native versions.
+</Note>
+
+### Characteristics
+
+- **Dependencies:** webgpu-native v0.27 (native) or a browser with WebGPU support
+- **Compute shaders:** The pipeline leverages compute shaders for more aggressive rendering optimizations compared to traditional graphics pipelines.
+- **Cross-platform abstraction:** By targeting WebGPU, ThorVG can run on Metal, Vulkan, and Direct3D hardware through the webgpu-native translation layer.
+- **No SmartRender:** `EngineOption::SmartRender` is not currently supported.
+
+### When to use it
+
+- Cutting-edge web applications where the browser WebGPU API is available
+- Applications targeting the next generation of GPU APIs across platforms
+- Research and preview environments where bleeding-edge performance is desired
+
+### Build options
+
+```bash
+# Enable the WebGPU engine
+meson setup builddir -Dengines=wg
+
+# Enable all engines
+meson setup builddir -Dengines=all
+```
+
+### Setup
+
+```cpp
+auto canvas = tvg::WgCanvas::gen();
+
+canvas->target(
+    nullptr,       // WGPUDevice; nullptr lets ThorVG assign one internally
+    instance,      // WGPUInstance
+    surface,       // WGPUSurface or WGPUTexture
+    width, height,
+    tvg::ColorSpace::ABGR8888S,   // currently required color space
+    0              // 0 = surface target, 1 = texture target
+);
+```
+
+## Comparison table
+
+| Feature | SwCanvas | GlCanvas | WgCanvas |
+|---------|---------|---------|---------|
+| External GPU dependency | None | OpenGL 3.3 / ES 3.0 / WebGL 2 | webgpu-native v0.27 / browser WebGPU |
+| CPU rendering | Yes | No | No |
+| SIMD acceleration | Optional (`-Dsimd=true`) | GPU-native | GPU-native |
+| SmartRender support | Yes | No | No |
+| Multi-threading | Yes (`-Dthreads=true`) | Yes | Yes |
+| Full feature parity | Yes | Yes | Yes |
+| Best for | Embedded, IoT, server-side, tooling | Desktop / mobile GL apps | Next-gen GPU / web |
+| Build flag | `-Dengines=cpu` (default) | `-Dengines=gl` | `-Dengines=wg` |
+
+## Threading and the task scheduler
+
+ThorVG includes a built-in task scheduler based on a thread pool. It parallelizes encoding, decoding, updates, and rendering across all available worker threads.
+
+```cpp
+tvg::Initializer::init(4);   // launch 4 worker threads
+tvg::Initializer::init(0);   // single-threaded; no scheduler overhead
+```
+
+Enable or disable the scheduler at build time:
+
+```bash
+meson setup builddir -Dthreads=true    # enabled (default)
+meson setup builddir -Dthreads=false   # single-threaded build
+```
+
+<Note>
+Drawing may run asynchronously when worker threads are active. Always call `canvas->sync()` after `canvas->draw()` before reading the pixel buffer or presenting the surface.
+</Note>
+
+## Smart rendering
+
+The `SwCanvas` backend supports partial (smart) rendering through `EngineOption::SmartRender`. The engine tracks which regions of the canvas changed between frames and redraws only those areas.
+
+```cpp
+auto canvas = tvg::SwCanvas::gen(tvg::EngineOption::SmartRender);
+```
+
+`EngineOption` values:
+
+| Value | Description |
+|-------|-------------|
+| `EngineOption::Default` | Full redraw every frame |
+| `EngineOption::SmartRender` | Partial redraw of changed regions |
+
+Smart rendering is most effective when:
+- A large portion of the scene is static between frames (UI panels, dashboards)
+- Only small elements animate (icons, indicators, cursors)
+- You are targeting mobile or embedded devices where energy efficiency matters
+
+It provides less benefit — and may add overhead — when:
+- Most or all objects change every frame (games, full-screen animations)
+- The canvas is small and fully covered by dynamic content
+
+Benchmark both modes with your specific content to determine which performs better.

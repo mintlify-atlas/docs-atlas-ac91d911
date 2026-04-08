@@ -1,0 +1,233 @@
+---
+title: "Fills and Gradients"
+description: "Solid color fills, linear and radial gradients with color stops."
+---
+
+ThorVG supports two fill strategies: a simple solid RGBA color, and a gradient fill (linear or radial). Both can be applied to a shape's interior and to its stroke.
+
+## Solid fill
+
+The simplest fill is a solid RGBA color set directly on the shape.
+
+```cpp
+// Signature
+Result Shape::fill(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255) noexcept;
+```
+
+```cpp
+auto shape = tvg::Shape::gen();
+shape->appendRect(0, 0, 200, 200);
+shape->fill(255, 128, 0, 255);   // opaque orange
+canvas->add(shape);
+```
+
+The `a` channel defaults to 255 (fully opaque). Setting `a` to 0 makes the fill completely transparent.
+
+---
+
+## Color stops
+
+Both gradient types share the `Fill::ColorStop` struct to define the color transitions.
+
+```cpp
+struct Fill::ColorStop {
+    float   offset;  // relative position in [0.0, 1.0]
+    uint8_t r;       // red   [0-255]
+    uint8_t g;       // green [0-255]
+    uint8_t b;       // blue  [0-255]
+    uint8_t a;       // alpha [0-255]
+};
+```
+
+Set the stops on any `Fill` instance:
+
+```cpp
+// Signature
+Result Fill::colorStops(const ColorStop* colorStops, uint32_t cnt) noexcept;
+```
+
+---
+
+## Linear vs. radial gradients
+
+<Tabs>
+  <Tab title="Linear gradient">
+    `LinearGradient` blends colors along a straight line defined by two endpoints.
+
+    ```cpp
+    // Factory
+    static LinearGradient* LinearGradient::gen() noexcept;
+
+    // Set gradient line: (x1, y1) to (x2, y2)
+    Result LinearGradient::linear(float x1, float y1, float x2, float y2) noexcept;
+    ```
+
+    ```cpp
+    auto grad = tvg::LinearGradient::gen();
+    grad->linear(0, 0, 200, 0);   // left to right
+
+    Fill::ColorStop stops[] = {
+        {0.0f, 255,   0, 0, 255},   // red at start
+        {0.5f, 255, 255, 0, 255},   // yellow at midpoint
+        {1.0f,   0,   0, 255, 255}, // blue at end
+    };
+    grad->colorStops(stops, 3);
+
+    auto shape = tvg::Shape::gen();
+    shape->appendRect(0, 0, 200, 100);
+    shape->fill(grad);
+    canvas->add(shape);
+    ```
+  </Tab>
+  <Tab title="Radial gradient">
+    `RadialGradient` radiates colors from a focal start circle to an outer end circle.
+
+    ```cpp
+    // Factory
+    static RadialGradient* RadialGradient::gen() noexcept;
+
+    // Set radial attributes
+    // cx, cy -- center of the end (outer) circle
+    // r      -- radius of the end circle
+    // fx, fy -- center/focal point of the start (inner) circle
+    // fr     -- radius of the start circle
+    Result RadialGradient::radial(float cx, float cy, float r,
+                                  float fx, float fy, float fr) noexcept;
+    ```
+
+    ```cpp
+    auto grad = tvg::RadialGradient::gen();
+    // Center burst: focal point at center, no inner radius
+    grad->radial(200, 200, 125, 200, 200, 0);
+
+    Fill::ColorStop stops[] = {
+        {0.00f, 255, 255, 255, 255},
+        {0.50f, 128,  80, 255, 200},
+        {1.00f,   0,   0, 128, 255},
+    };
+    grad->colorStops(stops, 3);
+    grad->spread(tvg::FillSpread::Pad);
+
+    auto circle = tvg::Shape::gen();
+    circle->appendCircle(200, 200, 125, 125);
+    circle->fill(grad);
+    canvas->add(circle);
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Radial gradient: focal point offset
+
+Move the focal point off-center to create a lens or spotlight effect:
+
+```cpp
+auto grad = tvg::RadialGradient::gen();
+// Focal point shifted toward top-left of the end circle
+grad->radial(200, 200, 100, 170, 170, 10);
+
+Fill::ColorStop stops[] = {
+    {0.0f, 255, 255, 200, 255},
+    {1.0f,  80,  20,   0, 255},
+};
+grad->colorStops(stops, 2);
+```
+
+- Gradient stop `0.0` aligns with the edge of the start circle (`fr`).
+- Gradient stop `1.0` aligns with the edge of the end circle (`r`).
+- For a classic center-burst, set `fx = cx`, `fy = cy`, and `fr = 0`.
+
+---
+
+## Fill spread
+
+`FillSpread` determines how the gradient fills areas outside its defined bounds.
+
+```cpp
+// Signature
+Result Fill::spread(FillSpread s) noexcept;
+```
+
+| Value | Description |
+|-------|-------------|
+| `FillSpread::Pad` | Extends the last stop color to the boundary (default) |
+| `FillSpread::Reflect` | Mirrors the gradient pattern |
+| `FillSpread::Repeat` | Repeats the gradient pattern continuously |
+
+```cpp
+grad->spread(tvg::FillSpread::Reflect);
+```
+
+---
+
+## Gradient transform
+
+Apply an affine transformation matrix to a gradient to rotate, skew, or scale it independently of the shape.
+
+```cpp
+// Signature
+Result Fill::transform(const Matrix& m) noexcept;
+```
+
+```cpp
+// Rotate the gradient 45 degrees
+float rad = 3.14159f / 4.0f;
+Matrix m = {
+    cosf(rad), -sinf(rad), 0,
+    sinf(rad),  cosf(rad), 0,
+    0,          0,         1
+};
+grad->transform(m);
+```
+
+---
+
+## Applying fills to strokes
+
+Both solid and gradient fills can be applied to a shape's stroke rather than its interior.
+
+```cpp
+// Solid stroke color
+shape->strokeWidth(5.0f);
+shape->strokeFill(255, 0, 128, 255);  // strokeFill(r, g, b, a = 255)
+
+// Gradient stroke
+auto strokeGrad = tvg::LinearGradient::gen();
+strokeGrad->linear(0, 0, 300, 0);
+Fill::ColorStop stops[] = {
+    {0.0f, 255, 0, 0, 255},
+    {1.0f, 0, 0, 255, 255},
+};
+strokeGrad->colorStops(stops, 2);
+shape->strokeWidth(6.0f);
+shape->strokeFill(strokeGrad);  // Result Shape::strokeFill(Fill* f)
+```
+
+---
+
+## Full example: circle with radial gradient
+
+```cpp
+#include <thorvg.h>
+using namespace tvg;
+
+void drawGradientCircle(Canvas* canvas) {
+    auto grad = tvg::RadialGradient::gen();
+    grad->radial(200, 200, 125, 200, 200, 0);
+
+    Fill::ColorStop stops[] = {
+        {0.00f, 255, 255, 255, 255},
+        {0.50f, 128,  80, 255, 200},
+        {1.00f,   0,   0, 128, 255},
+    };
+    grad->colorStops(stops, 3);
+    grad->spread(tvg::FillSpread::Pad);
+
+    auto circle = tvg::Shape::gen();
+    circle->appendCircle(200, 200, 125, 125);
+    circle->fill(grad);
+
+    canvas->add(circle);
+}
+```

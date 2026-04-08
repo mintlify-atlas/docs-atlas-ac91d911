@@ -1,0 +1,129 @@
+---
+title: "Shape"
+description: "2D shape drawing with paths, fills, and strokes."
+---
+
+`tvg::Shape` inherits from `Paint` and is the primary class for drawing vector shapes.
+
+## Factory
+
+```cpp
+static Shape* gen() noexcept;
+```
+
+## Path building
+
+### Primitive commands
+
+```cpp
+Result moveTo(float x, float y) noexcept;
+Result lineTo(float x, float y) noexcept;
+Result cubicTo(float cx1, float cy1, float cx2, float cy2, float x, float y) noexcept;
+Result close() noexcept;
+Result reset() noexcept;  // clear path; keeps fill/stroke settings
+```
+
+### Convenience shapes
+
+```cpp
+// Rounded rectangle (rx=ry=0 for sharp corners; cw=clockwise direction)
+Result appendRect(float x, float y, float w, float h,
+                  float rx = 0, float ry = 0, bool cw = true) noexcept;
+
+// Ellipse/circle (rx == ry for a circle)
+Result appendCircle(float cx, float cy, float rx, float ry, bool cw = true) noexcept;
+
+// Arc (pie=true draws a pie slice)
+Result appendArc(float cx, float cy, float radius,
+                 float startAngle, float sweep, bool pie) noexcept;
+
+// Bulk path import
+Result appendPath(const PathCommand* cmds, uint32_t cmdCnt,
+                  const Point* pts, uint32_t ptsCnt) noexcept;
+```
+
+### Querying path data
+
+```cpp
+Result path(const PathCommand** cmds, uint32_t* cmdsCnt,
+            const Point** pts, uint32_t* ptsCnt) const noexcept;
+```
+
+## Fill
+
+```cpp
+Result fill(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255) noexcept;
+Result fill(Fill* f) noexcept;                     // gradient fill
+Result fillRule(FillRule r) noexcept;              // NonZero (default) or EvenOdd
+const Fill* fill() const noexcept;                 // get gradient
+Result fill(uint8_t* r, uint8_t* g, uint8_t* b, uint8_t* a = nullptr) const noexcept;
+FillRule fillRule() const noexcept;
+```
+
+## Stroke
+
+```cpp
+Result strokeWidth(float width) noexcept;          // 0 disables stroke
+Result strokeFill(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255) noexcept;
+Result strokeFill(Fill* f) noexcept;               // gradient stroke
+Result strokeCap(StrokeCap cap) noexcept;          // Butt, Round, Square
+Result strokeJoin(StrokeJoin join) noexcept;       // Miter, Bevel, Round
+Result strokeMiterlimit(float miterlimit) noexcept;
+Result strokeDash(const float* dashPattern, uint32_t cnt, float offset = 0.0f) noexcept;
+
+// Getters
+float strokeWidth() const noexcept;
+StrokeCap strokeCap() const noexcept;
+StrokeJoin strokeJoin() const noexcept;
+float strokeMiterlimit() const noexcept;
+uint32_t strokeDash(const float** dashPattern, float* offset = nullptr) const noexcept;
+const Fill* strokeFill() const noexcept;
+Result strokeFill(uint8_t* r, uint8_t* g, uint8_t* b, uint8_t* a = nullptr) const noexcept;
+```
+
+**StrokeCap values:**
+- `Butt` — ends exactly at endpoint
+- `Round` — semicircle extension
+- `Square` — rectangle extension (default)
+
+**StrokeJoin values:**
+- `Miter` — spiked outer corner (default)
+- `Bevel` — flat cut corner
+- `Round` — rounded corner
+
+## Trim path
+
+```cpp
+// Show only the portion from begin to end (0.0–1.0)
+Result trimpath(float begin, float end, bool simultaneous = true) noexcept;
+```
+
+`simultaneous = true` applies trim to each sub-path independently. `false` treats all sub-paths as a single combined length.
+
+## Rendering order
+
+```cpp
+Result order(bool strokeFirst) noexcept;  // true = stroke behind fill
+```
+
+## Full example
+
+```cpp
+// Rounded rectangle with gradient fill and dashed stroke
+auto shape = tvg::Shape::gen();
+shape->appendRect(50, 50, 300, 200, 15, 15);
+
+auto fill = tvg::LinearGradient::gen();
+fill->linear(50, 50, 350, 250);
+tvg::Fill::ColorStop stops[2] = {{0.0f, 255, 100, 0, 255}, {1.0f, 0, 100, 255, 255}};
+fill->colorStops(stops, 2);
+shape->fill(fill);
+
+shape->strokeWidth(2.0f);
+shape->strokeFill(255, 255, 255, 180);
+shape->strokeCap(tvg::StrokeCap::Round);
+float dash[] = {8, 4};
+shape->strokeDash(dash, 2);
+
+canvas->add(shape);
+```
